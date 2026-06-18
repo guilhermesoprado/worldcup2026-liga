@@ -1,0 +1,84 @@
+import { groups, getCompetitionOverview, getGroupMatches, getGroupStandings } from "@/domain/participants/static-league-data";
+import { LivePublicDataService } from "@/server/services/live-public-data.service";
+import { SyncService } from "@/server/services/sync.service";
+
+export class PublicOverviewService {
+  private readonly syncService = new SyncService();
+  private readonly livePublicDataService = new LivePublicDataService();
+
+  async getOverview(roundId?: string | null, groupId?: string | null) {
+    const liveSnapshot = await this.livePublicDataService.getSnapshot();
+    const autoSyncAllowed = await this.syncService.shouldRunAccessDrivenSync();
+    const overview = getCompetitionOverview();
+    const activeGroup = this.resolveActiveGroup(
+      groupId,
+      liveSnapshot.groups,
+      groups[0] ?? null
+    );
+    const selectedRoundNumber = this.resolveRoundNumber(
+      roundId,
+      liveSnapshot.availableRounds,
+      liveSnapshot.currentRoundNumber
+    );
+
+    return {
+      phase: liveSnapshot.phase ?? overview.phaseKey,
+      phaseLabel: liveSnapshot.phaseLabel ?? overview.phaseLabel,
+      completedMatches: liveSnapshot.completedMatches,
+      totalMatches: liveSnapshot.totalMatches,
+      currentRoundNumber: liveSnapshot.currentRoundNumber,
+      currentRoundLabel: liveSnapshot.currentRoundLabel,
+      selectedRoundNumber,
+      selectedRoundLabel: `${selectedRoundNumber}a rodada`,
+      standingsRoundNumber: liveSnapshot.standingsRoundNumber,
+      standingsRoundLabel: liveSnapshot.standingsRoundLabel,
+      stateLabel: liveSnapshot.stateLabel,
+      groups: liveSnapshot.groups,
+      availableRounds: liveSnapshot.availableRounds,
+      activeGroupCode: activeGroup?.code ?? groups[0]?.code ?? "A",
+      activeGroupStandings:
+        liveSnapshot.standingsByGroup[activeGroup?.code ?? "A"] ??
+        getGroupStandings(activeGroup?.code ?? "A"),
+      currentRoundMatches:
+        liveSnapshot.matches.filter(
+          (match) =>
+            match.groupCode === (activeGroup?.code ?? "A") &&
+            match.roundNumber === selectedRoundNumber
+        ) ?? getGroupMatches(activeGroup?.code ?? "A"),
+      mostPickedPlayers:
+        liveSnapshot.mostPickedByRound[String(selectedRoundNumber)] ??
+        [],
+      autoSyncAllowed,
+      usesLiveData: liveSnapshot.usesLiveData
+    };
+  }
+
+  private resolveRoundNumber(
+    roundId: string | null | undefined,
+    availableRounds: number[],
+    defaultRoundNumber: number
+  ) {
+    const parsedRound = Number(roundId);
+
+    if (Number.isInteger(parsedRound) && availableRounds.includes(parsedRound)) {
+      return parsedRound;
+    }
+
+    return defaultRoundNumber;
+  }
+
+  private resolveActiveGroup(
+    groupId: string | null | undefined,
+    liveGroups: { code: string; displayName: string }[],
+    fallbackGroup: { code: string } | null
+  ) {
+    const normalizedGroupCode = groupId?.toUpperCase();
+    const resolvedGroup = liveGroups.find((group) => group.code === normalizedGroupCode);
+
+    if (resolvedGroup) {
+      return resolvedGroup;
+    }
+
+    return fallbackGroup ? { code: fallbackGroup.code, displayName: `Grupo ${fallbackGroup.code}` } : null;
+  }
+}

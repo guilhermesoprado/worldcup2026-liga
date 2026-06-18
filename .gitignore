@@ -1,0 +1,12 @@
+node_modules
+.next
+playwright-report
+test-results
+.env
+.env.local
+.env.production
+coverage
+dist
+.supabase
+.config
+.local-share

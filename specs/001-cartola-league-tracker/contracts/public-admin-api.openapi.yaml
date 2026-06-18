@@ -1,0 +1,115 @@
+openapi: 3.1.0
+info:
+  title: Cartola League Tracker API
+  version: 1.0.0
+  description: >
+    Public read endpoints and single-admin operational endpoints for the
+    Cartola World Cup league tracker.
+servers:
+  - url: https://example.com
+paths:
+  /api/public/overview:
+    get:
+      summary: Get public competition overview
+      responses:
+        '200':
+          description: Current public competition state
+  /api/public/groups/{groupId}:
+    get:
+      summary: Get group standings and group matches
+      parameters:
+        - in: path
+          name: groupId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Group standings and fixtures for one group
+        '404':
+          description: Group not found
+  /api/public/matches:
+    get:
+      summary: Get matches for a phase or round
+      parameters:
+        - in: query
+          name: phase
+          schema:
+            type: string
+        - in: query
+          name: roundId
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Filtered match list with partial or official state
+  /api/public/teams/{teamId}:
+    get:
+      summary: Get team lineup and scoring detail
+      parameters:
+        - in: path
+          name: teamId
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Team detail for the selected participant
+        '404':
+          description: Team not found
+  /api/public/most-picked:
+    get:
+      summary: Get the most-picked players for a round
+      parameters:
+        - in: query
+          name: roundId
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Most-picked player ranking
+  /api/admin/settings:
+    get:
+      summary: Get current sync configuration
+      responses:
+        '200':
+          description: Current admin-visible sync settings
+        '401':
+          description: Admin authentication required
+    patch:
+      summary: Update sync configuration
+      requestBody:
+        required: true
+      responses:
+        '200':
+          description: Updated sync configuration
+        '401':
+          description: Admin authentication required
+        '422':
+          description: Validation error
+  /api/admin/sync:
+    post:
+      summary: Trigger a manual synchronization
+      responses:
+        '200':
+          description: Sync execution result
+        '401':
+          description: Admin authentication required
+        '409':
+          description: Sync skipped because one is already in progress
+  /api/admin/auth:
+    post:
+      summary: Start admin authenticated session
+      requestBody:
+        required: true
+      responses:
+        '200':
+          description: Authenticated session started
+        '401':
+          description: Invalid credentials
+components:
+  securitySchemes:
+    adminSession:
+      type: apiKey
+      in: cookie
+      name: admin_session
