@@ -30,6 +30,21 @@ export function MatchCards({ matches }: MatchCardsProps) {
       {matches.map((match) => {
         const scoreAvailable = hasScore(match);
         const winner = resolveWinner(match);
+        const isDraw = scoreAvailable && winner === null;
+        const homeStateClass = isDraw
+          ? "match-team--draw"
+          : winner === "home"
+            ? "match-team--winner"
+            : winner === "away"
+              ? "match-team--loser"
+              : "";
+        const awayStateClass = isDraw
+          ? "match-team--draw"
+          : winner === "away"
+            ? "match-team--winner"
+            : winner === "home"
+              ? "match-team--loser"
+              : "";
 
         return (
           <article key={match.id} className={`match-card match-card--${match.state}`}>
@@ -39,7 +54,7 @@ export function MatchCards({ matches }: MatchCardsProps) {
             </div>
 
             <div className={`match-card__teams ${scoreAvailable ? "match-card__teams--with-score" : ""}`}>
-              <div className={`match-team ${winner === "home" ? "match-team--winner" : ""}`}>
+              <div className={`match-team ${homeStateClass}`.trim()}>
                 <div className="match-team__header">
                   <FlagBadge country={match.homeCountry} />
                   <div className="match-team__copy">
@@ -64,7 +79,7 @@ export function MatchCards({ matches }: MatchCardsProps) {
                 </span>
               </div>
 
-              <div className={`match-team match-team--right ${winner === "away" ? "match-team--winner" : ""}`}>
+              <div className={`match-team match-team--right ${awayStateClass}`.trim()}>
                 <div className="match-team__header match-team__header--right">
                   <div className="match-team__copy">
                     <span className="match-team__name">{match.awayCartolaTeamName}</span>

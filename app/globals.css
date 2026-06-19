@@ -962,14 +962,39 @@ a {
   color: var(--public-accent);
 }
 
-.public-home .match-team--winner .match-team__copy::after {
-  content: "";
-  display: block;
-  width: 30px;
-  height: 2px;
-  margin-top: 6px;
-  border-radius: 999px;
-  background: var(--public-accent);
+.public-home .match-team--winner .match-team__country {
+  color: rgba(99, 240, 194, 0.78);
+}
+
+.public-home .match-team--winner .flag-badge {
+  border-color: rgba(99, 240, 194, 0.26);
+  box-shadow: 0 0 0 4px rgba(99, 240, 194, 0.06);
+}
+
+.public-home .match-team--loser .match-team__name {
+  color: rgba(255, 197, 192, 0.92);
+}
+
+.public-home .match-team--loser .match-team__country {
+  color: rgba(255, 180, 171, 0.72);
+}
+
+.public-home .match-team--loser .flag-badge {
+  border-color: rgba(255, 120, 120, 0.18);
+  box-shadow: 0 0 0 4px rgba(255, 120, 120, 0.04);
+}
+
+.public-home .match-team--draw .match-team__name {
+  color: rgba(255, 228, 170, 0.96);
+}
+
+.public-home .match-team--draw .match-team__country {
+  color: rgba(239, 180, 137, 0.78);
+}
+
+.public-home .match-team--draw .flag-badge {
+  border-color: rgba(239, 180, 137, 0.2);
+  box-shadow: 0 0 0 4px rgba(239, 180, 137, 0.04);
 }
 
 .public-home .match-score {
