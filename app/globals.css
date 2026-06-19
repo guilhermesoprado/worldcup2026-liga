@@ -707,6 +707,14 @@ a {
   color: var(--public-accent);
 }
 
+.public-home .match-card .text-link {
+  color: #8dc2ff;
+}
+
+.public-home .match-card .text-link:hover {
+  color: #b5d8ff;
+}
+
 .public-home__group-card {
   margin-top: 18px;
 }
