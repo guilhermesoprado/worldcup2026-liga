@@ -62,7 +62,10 @@ export default async function PublicHomePage({
             </div>
           </div>
           {overview.activeGroupStandings.length > 0 ? (
-            <StandingsTable standings={overview.activeGroupStandings} />
+            <StandingsTable
+              standings={overview.activeGroupStandings}
+              roundNumber={overview.standingsRoundNumber}
+            />
           ) : (
             <EmptyState
               title="Sem classificação disponível"

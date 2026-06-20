@@ -57,7 +57,10 @@ export default async function GroupDetailPage({
             </div>
           </div>
           {groupView.standings.length > 0 ? (
-            <StandingsTable standings={groupView.standings} />
+            <StandingsTable
+              standings={groupView.standings}
+              roundNumber={groupView.standingsRoundNumber}
+            />
           ) : (
             <EmptyState
               title="Sem dados do grupo"
