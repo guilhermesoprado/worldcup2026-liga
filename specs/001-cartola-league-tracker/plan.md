@@ -15,6 +15,15 @@ league's own classification and knockout rules. The implementation will use a
 single Next.js application with clear separation between public UI, admin
 operations, domain rules, persistence, and external synchronization.
 
+## Implementation Status Snapshot
+
+The repository already contains the first production implementation for the
+public site, admin area, Cartola client, Supabase persistence, and snapshot
+services for rounds, matches, standings, lineups, and most-picked data. The
+current planning focus is a sync refinement pass for the completed group-stage
+tracker so that round officialization, partial score calculation, and
+most-picked aggregation follow the confirmed `status_mercado` rules.
+
 ## Technical Context
 
 **Language/Version**: TypeScript 5.x, Node.js 22 LTS
@@ -50,8 +59,10 @@ round status; the app is authoritative for league rules, participant mapping,
 and official league table presentation after consolidation
 
 **Sync Strategy**: Access-driven internal refresh with configurable interval,
-admin-controlled pause/resume, and manual "sync now" fallback; finalization
-promotes official round state once Cartola marks the round complete
+admin-controlled pause/resume, and manual "sync now" fallback; only the current
+round is recalculated while active, officialization happens when
+`rodada_atual` advances and `status_mercado = 1`, and states outside `1` and
+`2` preserve the last reliable snapshot without forced recalculation
 
 **Hosting/Operations**: Vercel Hobby for app hosting, Supabase free tier for
 database/auth, encrypted environment variables for secrets, and server-side sync
@@ -87,11 +98,14 @@ execution only
 - In that situation, the system MUST keep the last reliable state already stored
   by the application and allow a later retry through the normal sync flow.
 
-**Endpoints treated as optional or unreliable for the first implementation**:
+**Operational endpoint semantics confirmed for this implementation**:
 
 - `GET /mercado/status`
-  Status: endpoint exists, but may return operational errors depending on market
-  state. Use only as a secondary signal, never as the sole source of sync state.
+  Confirmed semantics for project behavior:
+  `status_mercado = 1` means market open,
+  `status_mercado = 2` means market closed,
+  `status_mercado = 4` means maintenance.
+  `rodada_atual` is the active operational round boundary.
 - `GET /liga/{slug}`
   Status: public access was not reliable in validation. Do not depend on league
   membership lookup because the 48 participants are fixed and will be persisted
@@ -102,16 +116,39 @@ execution only
 - The app MUST persist the 48 participants and their `timeId` mapping locally
   instead of depending on league roster lookup at runtime.
 - The app MUST compute the "most picked players" ranking internally by counting
-  athlete appearances across the 48 fetched lineups, then enriching the result
-  with player metadata from `/atletas/mercado`.
-- The app MUST combine `/time/id/{timeId}` and `/atletas/pontuados` to render
-  partial lineup detail while a round is live.
+  athlete appearances across the 48 fetched lineups for the current operational
+  round, then enriching the result with player metadata from `/atletas/mercado`.
+- The app MUST combine `/time/id/{timeId}` and `/atletas/pontuados` to compute
+  partial round scores while `status_mercado = 2`, including valid reserve
+  substitutions and `1.5x` captain multiplier.
+- The app MUST use `GET /time/id/{timeId}/{rodada}` as the authoritative score
+  source for the previous round once `rodada_atual` advances and
+  `status_mercado = 1`.
 - The app MUST treat `/partidas` as the authoritative source for official World
   Cup fixtures and result publication timing used by the league mirror.
 - The app MUST NOT introduce fallback reads against any non-Copa Cartola API,
   even when equivalent endpoints exist elsewhere in the Cartola ecosystem.
 - Secret values for authenticated requests MUST live only in environment
   variables and server-only integration modules.
+
+## Sync Refinement Addendum
+
+The next implementation pass must apply these operational rules across sync,
+public read models, and team detail:
+
+1. Only the current operational round is recalculated repeatedly.
+2. Partial scores are computed only while `status_mercado = 2`.
+3. Partial lineup totals are derived from starters, valid reserve replacements,
+   athlete scores from `/atletas/pontuados`, and `1.5x` captain score.
+4. When `rodada_atual` changes and `status_mercado = 1`, the previous round is
+   consolidated as official and should stop receiving partial updates.
+5. When `status_mercado` is neither `1` nor `2`, the system records the
+   operational state but does not force score recalculation.
+6. The "most picked" ranking for a round is recomputed from the operational
+   round lineups when the round is being actively processed.
+7. Public pages and team detail should prefer persisted snapshots from the
+   database after each sync, using live reconstruction only as a fallback when
+   no persisted snapshot is available yet.
 
 ## Constitution Check
 

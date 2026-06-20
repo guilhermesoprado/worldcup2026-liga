@@ -95,17 +95,6 @@ export class LivePublicDataService {
   async getSnapshot(): Promise<LiveSnapshot> {
     await this.syncService.runAccessDrivenSyncIfDue().catch(() => null);
 
-    const liveSnapshot = await this.buildLiveSnapshot();
-
-    if (liveSnapshot && this.isPartialSnapshot(liveSnapshot)) {
-      cachedSnapshot = {
-        expiresAt: Date.now() + CACHE_TTL_MS,
-        snapshot: liveSnapshot
-      };
-
-      return liveSnapshot;
-    }
-
     const persistedSnapshot = await this.persistedPublicSnapshotService.getSnapshot();
 
     if (persistedSnapshot) {
@@ -116,6 +105,7 @@ export class LivePublicDataService {
       return cachedSnapshot.snapshot;
     }
 
+    const liveSnapshot = await this.buildLiveSnapshot();
     const snapshot = liveSnapshot ?? this.buildFallbackSnapshot();
 
     cachedSnapshot = {
@@ -124,10 +114,6 @@ export class LivePublicDataService {
     };
 
     return snapshot;
-  }
-
-  private isPartialSnapshot(snapshot: LiveSnapshot) {
-    return snapshot.matches.some((match) => match.state === "partial");
   }
 
   private async buildLiveSnapshot(): Promise<LiveSnapshot | null> {
@@ -203,6 +189,13 @@ export class LivePublicDataService {
           });
         })
       );
+
+      if (
+        marketState.partialRoundNumber !== null &&
+        (lineupsByRound[marketState.partialRoundNumber]?.length ?? 0) < participants.length
+      ) {
+        return null;
+      }
 
       const matches = roundsToBuild.flatMap((roundNumber) =>
         this.buildMatchesForRound({

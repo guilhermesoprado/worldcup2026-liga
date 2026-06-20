@@ -28,6 +28,34 @@ type ReplaceLineupSnapshotInput = {
 };
 
 export class LineupSnapshotRepository extends BaseRepository {
+  async getByRoundAndParticipant(roundId: string, participantId: string) {
+    const db = this.ensureDb();
+    const { data: snapshot, error: snapshotError } = await db
+      .from("lineup_snapshots")
+      .select("*")
+      .eq("round_id", roundId)
+      .eq("participant_id", participantId)
+      .maybeSingle();
+
+    if (snapshotError) throw snapshotError;
+
+    if (!snapshot) {
+      return null;
+    }
+
+    const { data: players, error: playersError } = await db
+      .from("lineup_players")
+      .select("*")
+      .eq("lineup_snapshot_id", snapshot.id);
+
+    if (playersError) throw playersError;
+
+    return {
+      snapshot,
+      players: players ?? []
+    };
+  }
+
   async listByRoundId(roundId: string) {
     const db = this.ensureDb();
     const { data, error } = await db
