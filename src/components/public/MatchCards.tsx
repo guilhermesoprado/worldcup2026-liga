@@ -63,7 +63,10 @@ export function MatchCards({ matches }: MatchCardsProps) {
                   </div>
                 </div>
                 {match.state !== "scheduled" ? (
-                  <Link href={`/times/${match.homeParticipantId}`} className="text-link">
+                  <Link
+                    href={`/times/${match.homeParticipantId}?round=${match.roundNumber}`}
+                    className="text-link"
+                  >
                     ver time
                   </Link>
                 ) : null}
@@ -88,7 +91,10 @@ export function MatchCards({ matches }: MatchCardsProps) {
                   <FlagBadge country={match.awayCountry} />
                 </div>
                 {match.state !== "scheduled" ? (
-                  <Link href={`/times/${match.awayParticipantId}`} className="text-link">
+                  <Link
+                    href={`/times/${match.awayParticipantId}?round=${match.roundNumber}`}
+                    className="text-link"
+                  >
                     ver time
                   </Link>
                 ) : null}

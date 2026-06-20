@@ -4,9 +4,10 @@ import type { PublicStanding } from "@/types/public";
 
 type StandingsTableProps = {
   standings: PublicStanding[];
+  roundNumber?: number;
 };
 
-export function StandingsTable({ standings }: StandingsTableProps) {
+export function StandingsTable({ standings, roundNumber }: StandingsTableProps) {
   return (
     <div className="standings-wrap">
       <table className="standings-table">
@@ -39,7 +40,14 @@ export function StandingsTable({ standings }: StandingsTableProps) {
             >
               <td className="standings-table__sticky standings-table__sticky--pos">{standing.position}</td>
               <td className="standings-table__sticky standings-table__sticky--team">
-                <Link href={`/times/${standing.participantId}`} className="team-cell">
+                <Link
+                  href={
+                    roundNumber
+                      ? `/times/${standing.participantId}?round=${roundNumber}`
+                      : `/times/${standing.participantId}`
+                  }
+                  className="team-cell"
+                >
                   <FlagBadge country={standing.country} />
                   <span className="team-cell__copy">
                     <strong>{standing.cartolaTeamName}</strong>
