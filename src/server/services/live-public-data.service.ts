@@ -1,5 +1,12 @@
 import { buildMostPicked } from "@/domain/sync/build-most-picked";
 import {
+  buildAthletePartialIndex,
+  buildOfficialLineupSnapshot,
+  buildPartialLineupSnapshot,
+  type NormalizedLineup
+} from "@/domain/sync/lineup-score";
+import { formatRoundLabel, resolveMarketState } from "@/domain/sync/market-state";
+import {
   calculateGroupStandings,
   type GroupMatch
 } from "@/domain/standings/calculate-group-standings";
@@ -13,7 +20,6 @@ import {
 } from "@/domain/participants/static-league-data";
 import { cartolaClient } from "@/lib/cartola/client";
 import { mapAthleteCatalog } from "@/lib/cartola/mappers";
-import type { CartolaLineupPayload } from "@/lib/cartola/mappers";
 import { PersistedPublicSnapshotService } from "@/server/services/persisted-public-snapshot.service";
 import { SyncService } from "@/server/services/sync.service";
 import type {
@@ -44,23 +50,6 @@ type LiveSnapshot = {
 type CachedSnapshot = {
   expiresAt: number;
   snapshot: LiveSnapshot;
-};
-
-type LineupPlayer = {
-  athleteId: number;
-  playerName: string;
-  clubName: string | null;
-  positionName: string | null;
-  positionId: number;
-  entered: boolean;
-  roundId: number | null;
-};
-
-type RoundLineupSnapshot = {
-  participantId: string;
-  roundNumber: number;
-  totalPoints: number;
-  players: LineupPlayer[];
 };
 
 type MatchTemplate = {
@@ -106,6 +95,17 @@ export class LivePublicDataService {
   async getSnapshot(): Promise<LiveSnapshot> {
     await this.syncService.runAccessDrivenSyncIfDue().catch(() => null);
 
+    const liveSnapshot = await this.buildLiveSnapshot();
+
+    if (liveSnapshot && this.isPartialSnapshot(liveSnapshot)) {
+      cachedSnapshot = {
+        expiresAt: Date.now() + CACHE_TTL_MS,
+        snapshot: liveSnapshot
+      };
+
+      return liveSnapshot;
+    }
+
     const persistedSnapshot = await this.persistedPublicSnapshotService.getSnapshot();
 
     if (persistedSnapshot) {
@@ -116,7 +116,6 @@ export class LivePublicDataService {
       return cachedSnapshot.snapshot;
     }
 
-    const liveSnapshot = await this.buildLiveSnapshot();
     const snapshot = liveSnapshot ?? this.buildFallbackSnapshot();
 
     cachedSnapshot = {
@@ -125,6 +124,10 @@ export class LivePublicDataService {
     };
 
     return snapshot;
+  }
+
+  private isPartialSnapshot(snapshot: LiveSnapshot) {
+    return snapshot.matches.some((match) => match.state === "partial");
   }
 
   private async buildLiveSnapshot(): Promise<LiveSnapshot | null> {
@@ -140,46 +143,76 @@ export class LivePublicDataService {
         cartolaClient.getAthletesScored().catch(() => null)
       ]);
 
+      const marketState = resolveMarketState(marketStatus);
+
+      if (!marketState.shouldForceSync) {
+        return null;
+      }
+
       const athleteCatalog = market
         ? mapAthleteCatalog(market)
         : new Map<number, { name: string; clubId: number; positionId: number }>();
-      const currentRoundNumber = marketStatus.rodada_atual;
-      const currentRoundLabel = this.formatRoundLabel(currentRoundNumber);
-      const hasLiveAthleteScores = Boolean(
-        athletesScored && Object.keys(athletesScored.atletas).length > 0
-      );
-      const isLiveRound = marketStatus.bola_rolando && hasLiveAthleteScores;
+      const partialIndex = buildAthletePartialIndex(athletesScored);
+      const roundsToBuild = GROUP_STAGE_ROUNDS.filter((roundNumber) => {
+        if (marketState.partialRoundNumber !== null) {
+          return roundNumber <= marketState.partialRoundNumber;
+        }
 
-      const lineupsByRound = await this.loadLineupsByRound(
-        currentRoundNumber,
-        athleteCatalog,
-        market
-      );
-
-      const officialRoundNumber = this.getOfficialRoundNumber(
-        lineupsByRound,
-        currentRoundNumber
-      );
-      const standingsRoundNumber = isLiveRound
-        ? currentRoundNumber
-        : officialRoundNumber;
-      const standingsRoundLabel =
-        standingsRoundNumber > 0
-          ? this.formatRoundLabel(standingsRoundNumber)
-          : "nenhuma rodada";
-
-      const matches = this.buildMatches({
-        currentRoundNumber,
-        fixtures,
-        lineupsByRound,
-        officialRoundNumber,
-        isLiveRound
+        return roundNumber <= marketState.officialRoundNumber;
       });
+      const lineupsByRound: Record<
+        number,
+        Array<{ participantId: string; lineup: NormalizedLineup }>
+      > = {};
 
-      const standingsByGroup = this.buildStandingsByGroup(
-        matches,
-        standingsRoundNumber
+      await Promise.all(
+        roundsToBuild.map(async (roundNumber) => {
+          const results = await Promise.allSettled(
+            participants.map((participant) =>
+              cartolaClient.getTeamById(participant.cartolaTeamId, roundNumber)
+            )
+          );
+
+          lineupsByRound[roundNumber] = results.flatMap((result, index) => {
+            if (result.status === "rejected") {
+              return [];
+            }
+
+            const normalized =
+              marketState.partialRoundNumber === roundNumber
+                ? buildPartialLineupSnapshot({
+                    roundNumber,
+                    lineup: result.value,
+                    athleteCatalog,
+                    market,
+                    partialIndex
+                  })
+                : buildOfficialLineupSnapshot({
+                    roundNumber,
+                    lineup: result.value,
+                    athleteCatalog,
+                    market
+                  });
+
+            return [
+              {
+                participantId: participants[index]!.id,
+                lineup: normalized
+              }
+            ];
+          });
+        })
       );
+
+      const matches = roundsToBuild.flatMap((roundNumber) =>
+        this.buildMatchesForRound({
+          roundNumber,
+          isPartial: marketState.partialRoundNumber === roundNumber,
+          fixtures,
+          lineups: lineupsByRound[roundNumber] ?? []
+        })
+      );
+      const standingsByGroup = this.buildStandingsByGroup(matches, marketState.displayRoundNumber);
       const mostPickedByRound = this.buildMostPickedByRound(lineupsByRound);
 
       return {
@@ -187,15 +220,11 @@ export class LivePublicDataService {
         phaseLabel: "Fase de grupos",
         completedMatches: matches.filter((match) => match.state !== "scheduled").length,
         totalMatches: GROUP_STAGE_TOTAL_MATCHES,
-        currentRoundNumber,
-        currentRoundLabel,
-        standingsRoundNumber,
-        standingsRoundLabel,
-        stateLabel: this.buildStateLabel({
-          currentRoundNumber,
-          officialRoundNumber,
-          isLiveRound
-        }),
+        currentRoundNumber: marketState.displayRoundNumber,
+        currentRoundLabel: formatRoundLabel(marketState.displayRoundNumber),
+        standingsRoundNumber: marketState.displayRoundNumber,
+        standingsRoundLabel: formatRoundLabel(marketState.displayRoundNumber),
+        stateLabel: this.buildStateLabel(marketState),
         groups: groups.map((group) => ({
           code: group.code,
           displayName: group.displayName
@@ -211,266 +240,34 @@ export class LivePublicDataService {
     }
   }
 
-  private async loadLineupsByRound(
-    currentRoundNumber: number,
-    athleteCatalog: Map<number, { name: string; clubId: number; positionId: number }>,
-    market:
-      | {
-          clubes: Record<string, { id: number; nome: string }>;
-          posicoes: Record<string, { id: number; nome: string; abreviacao: string }>;
-        }
-      | null
-  ) {
-    const lineupsByRound: Record<number, RoundLineupSnapshot[]> = {};
-
-    await Promise.all(
-      GROUP_STAGE_ROUNDS.filter((roundNumber) => roundNumber <= currentRoundNumber).map(
-        async (roundNumber) => {
-          const results = await Promise.allSettled(
-            participants.map((participant) =>
-              cartolaClient.getTeamById(participant.cartolaTeamId, roundNumber)
-            )
-          );
-
-          lineupsByRound[roundNumber] = results.flatMap((result, index) => {
-            if (result.status === "rejected") {
-              return [];
-            }
-
-            const participant = participants[index]!;
-            const normalized = this.normalizeLineupSnapshot({
-              requestedRoundNumber: roundNumber,
-              currentRoundNumber,
-              lineup: result.value,
-              participantId: participant.id,
-              athleteCatalog,
-              market
-            });
-
-            return normalized ? [normalized] : [];
-          });
-        }
-      )
-    );
-
-    return lineupsByRound;
-  }
-
-  private normalizeLineupSnapshot({
-    requestedRoundNumber,
-    currentRoundNumber,
-    lineup,
-    participantId,
-    athleteCatalog,
-    market
-  }: {
-    requestedRoundNumber: number;
-    currentRoundNumber: number;
-    lineup: CartolaLineupPayload;
-    participantId: string;
-    athleteCatalog: Map<number, { name: string; clubId: number; positionId: number }>;
-    market:
-      | {
-          clubes: Record<string, { id: number; nome: string }>;
-          posicoes: Record<string, { id: number; nome: string; abreviacao: string }>;
-        }
-      | null;
-  }): RoundLineupSnapshot | null {
-    const allPlayers = [...lineup.atletas, ...lineup.reservas];
-    const detectedRounds = [...new Set(allPlayers.map((player) => player.rodada_id).filter(
-      (roundId): roundId is number => typeof roundId === "number"
-    ))];
-    const detectedRound =
-      detectedRounds.length === 1 ? detectedRounds[0] : null;
-
-    if (
-      requestedRoundNumber === currentRoundNumber &&
-      detectedRound !== requestedRoundNumber
-    ) {
-      return null;
-    }
-
-    if (
-      requestedRoundNumber < currentRoundNumber &&
-      detectedRound !== null &&
-      detectedRound !== requestedRoundNumber
-    ) {
-      return null;
-    }
-
-    const starters = lineup.atletas.map((player) =>
-      this.mapLineupPlayer(player, athleteCatalog, market)
-    );
-    const reserves = lineup.reservas.map((player) =>
-      this.mapLineupPlayer(player, athleteCatalog, market)
-    );
-
-    return {
-      participantId,
-      roundNumber: requestedRoundNumber,
-      totalPoints:
-        typeof lineup.pontos === "number"
-          ? lineup.pontos
-          : 0,
-      players: this.resolveEffectivePlayers(starters, reserves)
-    };
-  }
-
-  private mapLineupPlayer(
-    player: {
-      atleta_id: number;
-      apelido: string;
-      pontos_num?: number | null;
-      posicao_id: number;
-      clube_id: number;
-      rodada_id?: number | null;
-      entrou_em_campo?: boolean | null;
-    },
-    athleteCatalog: Map<number, { name: string; clubId: number; positionId: number }>,
-    market:
-      | {
-          clubes: Record<string, { id: number; nome: string }>;
-          posicoes: Record<string, { id: number; nome: string; abreviacao: string }>;
-        }
-      | null
-  ): LineupPlayer {
-    const catalogEntry = athleteCatalog.get(player.atleta_id);
-
-    return {
-      athleteId: player.atleta_id,
-      playerName: catalogEntry?.name ?? player.apelido,
-      clubName: catalogEntry
-        ? market?.clubes[String(catalogEntry.clubId)]?.nome ??
-          String(catalogEntry.clubId)
-        : null,
-      positionName: catalogEntry
-        ? market?.posicoes[String(catalogEntry.positionId)]?.nome ??
-          String(catalogEntry.positionId)
-        : null,
-      positionId: player.posicao_id,
-      entered: player.entrou_em_campo !== false,
-      roundId: player.rodada_id ?? null
-    };
-  }
-
-  private resolveEffectivePlayers(
-    starters: LineupPlayer[],
-    reserves: LineupPlayer[]
-  ) {
-    const effectivePlayers = starters.filter((player) => player.entered);
-    const unusedReserves = [...reserves];
-
-    for (const starter of starters.filter((player) => !player.entered)) {
-      const reserveIndex = unusedReserves.findIndex(
-        (reserve) =>
-          reserve.entered && reserve.positionId === starter.positionId
-      );
-
-      if (reserveIndex >= 0) {
-        effectivePlayers.push(unusedReserves[reserveIndex]!);
-        unusedReserves.splice(reserveIndex, 1);
-      }
-    }
-
-    return effectivePlayers;
-  }
-
-  private getOfficialRoundNumber(
-    lineupsByRound: Record<number, RoundLineupSnapshot[]>,
-    currentRoundNumber: number
-  ) {
-    return GROUP_STAGE_ROUNDS.filter((roundNumber) => roundNumber <= currentRoundNumber)
-      .filter((roundNumber) => (lineupsByRound[roundNumber] ?? []).length > 0)
-      .reduce((maxRound, roundNumber) => Math.max(maxRound, roundNumber), 0);
-  }
-
-  private buildMatches({
-    currentRoundNumber,
+  private buildMatchesForRound({
+    roundNumber,
+    isPartial,
     fixtures,
-    lineupsByRound,
-    officialRoundNumber,
-    isLiveRound
+    lineups
   }: {
-    currentRoundNumber: number;
-    fixtures: {
-      rodada: number;
-      clubes: Record<
-        string,
-        {
-          id: number;
-          nome: string;
-          abreviacao: string;
-          slug: string;
-          escudos: Record<string, string>;
-        }
-      >;
-      partidas: {
-        partida_id: number;
-        clube_casa_id: number;
-        clube_visitante_id: number;
-        partida_data: string;
-        timestamp?: number;
-        valida: boolean;
-        placar_oficial_mandante: number | null;
-        placar_oficial_visitante: number | null;
-      }[];
-    };
-    lineupsByRound: Record<number, RoundLineupSnapshot[]>;
-    officialRoundNumber: number;
-    isLiveRound: boolean;
-  }) {
-    const currentFixtureMatches = this.mapCurrentRoundFixtures(fixtures);
-    const matches: PublicMatch[] = [];
+    roundNumber: number;
+    isPartial: boolean;
+    fixtures: Awaited<ReturnType<typeof cartolaClient.getFixtures>>;
+    lineups: Array<{ participantId: string; lineup: NormalizedLineup }>;
+  }): PublicMatch[] {
+    const baseMatches =
+      isPartial && fixtures.rodada === roundNumber
+        ? this.mapCurrentRoundFixtures(fixtures)
+        : this.buildRoundTemplates(roundNumber);
+    const pointsByParticipantId = new Map(
+      lineups.map((entry) => [entry.participantId, entry.lineup.totalPoints])
+    );
 
-    for (const roundNumber of GROUP_STAGE_ROUNDS) {
-      const baseMatches =
-        roundNumber === currentRoundNumber && currentFixtureMatches.length > 0
-          ? currentFixtureMatches
-          : this.buildRoundTemplates(roundNumber);
-      const pointsByParticipantId = new Map(
-        (lineupsByRound[roundNumber] ?? []).map((lineup) => [
-          lineup.participantId,
-          lineup.totalPoints
-        ])
-      );
-      const roundState =
-        roundNumber < currentRoundNumber && roundNumber <= officialRoundNumber
-          ? "official"
-          : roundNumber === currentRoundNumber
-            ? isLiveRound
-              ? "partial"
-              : roundNumber <= officialRoundNumber
-                ? "official"
-                : "scheduled"
-            : "scheduled";
-
-      for (const match of baseMatches) {
-        matches.push({
-          ...match,
-          state: roundState,
-          homePoints:
-            roundState === "scheduled"
-              ? null
-              : Number(
-                  (pointsByParticipantId.get(match.homeParticipantId) ?? 0).toFixed(2)
-                ),
-          awayPoints:
-            roundState === "scheduled"
-              ? null
-              : Number(
-                  (pointsByParticipantId.get(match.awayParticipantId) ?? 0).toFixed(2)
-                )
-        });
-      }
-    }
-
-    return matches;
+    return baseMatches.map((match) => ({
+      ...match,
+      state: isPartial ? "partial" : "official",
+      homePoints: Number((pointsByParticipantId.get(match.homeParticipantId) ?? 0).toFixed(2)),
+      awayPoints: Number((pointsByParticipantId.get(match.awayParticipantId) ?? 0).toFixed(2))
+    }));
   }
 
-  private buildStandingsByGroup(
-    matches: PublicMatch[],
-    standingsRoundNumber: number
-  ) {
+  private buildStandingsByGroup(matches: PublicMatch[], standingsRoundNumber: number) {
     const effectiveMatches = matches.filter(
       (match) =>
         match.roundNumber <= standingsRoundNumber &&
@@ -479,9 +276,7 @@ export class LivePublicDataService {
     );
 
     return groups.reduce<Record<string, PublicStanding[]>>((acc, group) => {
-      const groupMatches = effectiveMatches.filter(
-        (match) => match.groupCode === group.code
-      );
+      const groupMatches = effectiveMatches.filter((match) => match.groupCode === group.code);
       const standingInput: GroupMatch[] = groupMatches.map((match) => ({
         homeParticipantId: match.homeParticipantId,
         awayParticipantId: match.awayParticipantId,
@@ -491,9 +286,7 @@ export class LivePublicDataService {
       const computed = calculateGroupStandings(standingInput);
 
       acc[group.code] = computed.map((standing, index) => {
-        const participant = participants.find(
-          (item) => item.id === standing.participantId
-        )!;
+        const participant = participants.find((item) => item.id === standing.participantId)!;
 
         return {
           participantId: participant.id,
@@ -523,7 +316,7 @@ export class LivePublicDataService {
   }
 
   private buildMostPickedByRound(
-    lineupsByRound: Record<number, RoundLineupSnapshot[]>
+    lineupsByRound: Record<number, Array<{ participantId: string; lineup: NormalizedLineup }>>
   ) {
     const result: Record<string, PublicMostPickedPlayer[]> = {};
 
@@ -531,7 +324,14 @@ export class LivePublicDataService {
       const roundLineups = lineupsByRound[roundNumber] ?? [];
 
       result[String(roundNumber)] = buildMostPicked(
-        roundLineups.map((lineup) => lineup.players)
+        roundLineups.map((entry) =>
+          entry.lineup.starters.map((player) => ({
+            athleteId: player.athleteId,
+            playerName: player.playerName,
+            clubName: player.clubName,
+            positionName: player.positionName
+          }))
+        )
       )
         .slice(0, 12)
         .map((athlete) => ({
@@ -568,35 +368,13 @@ export class LivePublicDataService {
           awayOwner: away.owner,
           homeCartolaTeamName: home.cartolaTeamName,
           awayCartolaTeamName: away.cartolaTeamName,
-          kickoffLabel: this.formatRoundLabel(roundNumber)
+          kickoffLabel: formatRoundLabel(roundNumber)
         };
       })
     );
   }
 
-  private mapCurrentRoundFixtures(fixtures: {
-    rodada: number;
-    clubes: Record<
-      string,
-      {
-        id: number;
-        nome: string;
-        abreviacao: string;
-        slug: string;
-        escudos: Record<string, string>;
-      }
-    >;
-    partidas: {
-      partida_id: number;
-      clube_casa_id: number;
-      clube_visitante_id: number;
-      partida_data: string;
-      timestamp?: number;
-      valida: boolean;
-      placar_oficial_mandante: number | null;
-      placar_oficial_visitante: number | null;
-    }[];
-  }): MatchTemplate[] {
+  private mapCurrentRoundFixtures(fixtures: Awaited<ReturnType<typeof cartolaClient.getFixtures>>) {
     return fixtures.partidas.flatMap((fixture) => {
       const home = resolveParticipantByCountry(
         fixtures.clubes[String(fixture.clube_casa_id)]?.nome ?? ""
@@ -623,38 +401,22 @@ export class LivePublicDataService {
           awayOwner: away.owner,
           homeCartolaTeamName: home.cartolaTeamName,
           awayCartolaTeamName: away.cartolaTeamName,
-          kickoffLabel: this.formatRoundLabel(fixtures.rodada)
+          kickoffLabel: formatRoundLabel(fixtures.rodada)
         }
       ];
     });
   }
 
-  private buildStateLabel({
-    currentRoundNumber,
-    officialRoundNumber,
-    isLiveRound
-  }: {
-    currentRoundNumber: number;
-    officialRoundNumber: number;
-    isLiveRound: boolean;
-  }) {
-    if (isLiveRound) {
-      return `Parcial da ${this.formatRoundLabel(currentRoundNumber)}`;
+  private buildStateLabel(marketState: ReturnType<typeof resolveMarketState>) {
+    if (marketState.partialRoundNumber !== null) {
+      return `Parcial da ${formatRoundLabel(marketState.partialRoundNumber)}`;
     }
 
-    if (officialRoundNumber > 0 && officialRoundNumber < currentRoundNumber) {
-      return `Oficial apos ${this.formatRoundLabel(officialRoundNumber)}`;
-    }
-
-    if (officialRoundNumber > 0) {
-      return `Oficial da ${this.formatRoundLabel(officialRoundNumber)}`;
+    if (marketState.officialRoundNumber > 0) {
+      return `Oficial da ${formatRoundLabel(marketState.officialRoundNumber)}`;
     }
 
     return "Aguardando dados oficiais";
-  }
-
-  private formatRoundLabel(roundNumber: number) {
-    return `${roundNumber}a rodada`;
   }
 
   private buildFallbackSnapshot(): LiveSnapshot {
