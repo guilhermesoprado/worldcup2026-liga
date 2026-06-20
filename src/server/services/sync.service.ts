@@ -1,5 +1,12 @@
 import { buildMostPicked } from "@/domain/sync/build-most-picked";
 import {
+  buildAthletePartialIndex,
+  buildOfficialLineupSnapshot,
+  buildPartialLineupSnapshot,
+  type NormalizedLineup
+} from "@/domain/sync/lineup-score";
+import { formatRoundLabel, resolveMarketState } from "@/domain/sync/market-state";
+import {
   calculateGroupStandings,
   type GroupMatch
 } from "@/domain/standings/calculate-group-standings";
@@ -15,6 +22,7 @@ import {
   type CartolaLineupPayload
 } from "@/lib/cartola/mappers";
 import { HttpError } from "@/lib/utils/http";
+import { LineupSnapshotRepository } from "@/server/repositories/lineup-snapshot.repository";
 import { MatchRepository } from "@/server/repositories/match.repository";
 import { MostPickedRepository } from "@/server/repositories/most-picked.repository";
 import { ParticipantRepository } from "@/server/repositories/participant.repository";
@@ -22,50 +30,15 @@ import { RoundRepository, type RoundStatus } from "@/server/repositories/round.r
 import { StandingsSnapshotRepository } from "@/server/repositories/standings-snapshot.repository";
 import { SyncConfigRepository } from "@/server/repositories/sync-config.repository";
 import { SyncExecutionRepository } from "@/server/repositories/sync-execution.repository";
-import { LineupSnapshotRepository } from "@/server/repositories/lineup-snapshot.repository";
 
 type SyncTriggerType = "automatic_access" | "manual_admin";
+type SyncMode = "default" | "officialized_only";
 
 type SyncParticipant = {
   id: string;
   groupId: string | null;
-  representedCountry: string;
   cartolaTeamId: number;
-  cartolaTeamName: string;
   staticId: string;
-};
-
-type AthleteCatalogEntry = {
-  athleteId: number;
-  clubId: number;
-  positionId: number;
-  name: string;
-  shortName: string;
-  photo: string | null;
-};
-
-type NormalizedPlayer = {
-  athleteId: number;
-  playerName: string;
-  clubName: string | null;
-  positionName: string | null;
-  positionId: number;
-  points: number;
-  entered: boolean;
-  source: "starter" | "reserve";
-};
-
-type NormalizedLineup = {
-  participantDbId: string;
-  participantStaticId: string;
-  roundNumber: number;
-  totalPoints: number;
-  captainId: number | null;
-  reserveLuxuryId: number | null;
-  starters: NormalizedPlayer[];
-  reserves: NormalizedPlayer[];
-  effectivePlayers: NormalizedPlayer[];
-  rawPayloadRef: string;
 };
 
 type SyncPublicMatch = {
@@ -79,6 +52,20 @@ type SyncPublicMatch = {
   awayParticipantId: string;
   homePoints: number | null;
   awayPoints: number | null;
+};
+
+type RoundProcessingState = "partial" | "official";
+
+type ProcessedRound = {
+  matches: SyncPublicMatch[];
+  lineups: Array<
+    NormalizedLineup & {
+      participantDbId: string;
+      participantStaticId: string;
+      rawPayloadRef: string;
+    }
+  >;
+  state: RoundProcessingState;
 };
 
 const GROUP_STAGE_ROUNDS = [1, 2, 3] as const;
@@ -143,6 +130,10 @@ export class SyncService {
     return this.runSync("manual_admin");
   }
 
+  async runOfficializedRoundsSync() {
+    return this.runSync("manual_admin", "officialized_only");
+  }
+
   async getAdminStatus() {
     const [
       config,
@@ -157,8 +148,7 @@ export class SyncService {
       this.syncConfigRepository.getCurrentConfig(),
       this.syncExecutionRepository.getLatest(),
       this.syncExecutionRepository.listRecent(),
-      this.roundRepository.listAll()
-      ,
+      this.roundRepository.listAll(),
       this.matchRepository.countAll(),
       this.standingsSnapshotRepository.countAll(),
       this.lineupSnapshotRepository.getCounts(),
@@ -195,230 +185,330 @@ export class SyncService {
     };
   }
 
-  private async runSync(triggerType: SyncTriggerType) {
+  private async runSync(triggerType: SyncTriggerType, mode: SyncMode = "default") {
     const startedAt = new Date().toISOString();
 
     try {
-      const [marketStatus, fixtures, athletesMarket, athletesScored, participants] =
+      const [marketStatus, fixtures, athletesMarket, athletesScored, participants, persistedRounds] =
         await Promise.all([
           cartolaClient.getMarketStatus(),
           cartolaClient.getFixtures(),
           cartolaClient.getAthletesMarket().catch(() => null),
           cartolaClient.getAthletesScored().catch(() => null),
-          this.getParticipantsForSync()
+          this.getParticipantsForSync(),
+          this.roundRepository.listAll()
         ]);
+
+      const marketState = resolveMarketState(marketStatus);
+
+      if (!marketState.shouldForceSync) {
+        const execution = await this.syncExecutionRepository.create({
+          triggerType,
+          status: "skipped",
+          summaryMessage: `Sync ignorado para status_mercado=${marketState.marketStatusCode}. Ultimo snapshot confiavel preservado.`,
+          startedAt,
+          finishedAt: new Date().toISOString()
+        });
+
+        return { execution, currentRoundNumber: marketState.displayRoundNumber };
+      }
 
       const athleteCatalog = athletesMarket
         ? mapAthleteCatalog(athletesMarket)
-        : new Map<number, AthleteCatalogEntry>();
-      const currentRoundNumber = marketStatus.rodada_atual;
-      const hasLiveAthleteScores = Boolean(
-        athletesScored && Object.keys(athletesScored.atletas).length > 0
+        : new Map();
+      const officialRoundsToBackfill = GROUP_STAGE_ROUNDS.filter((roundNumber) =>
+        roundNumber <= marketState.officialRoundNumber &&
+        (
+          mode === "officialized_only" ||
+          !this.isOfficialRoundPersisted(roundNumber, persistedRounds)
+        )
       );
-      const isLiveRound = marketStatus.bola_rolando && hasLiveAthleteScores;
-      const lineupsByRound = await this.loadLineupsByRound(
-        currentRoundNumber,
-        participants,
-        athleteCatalog,
-        athletesMarket
-      );
-      const officialRoundNumber = this.getOfficialRoundNumber(
-        lineupsByRound,
-        currentRoundNumber
-      );
-      const matches = this.buildMatches({
-        currentRoundNumber,
-        officialRoundNumber,
-        isLiveRound,
-        fixtures,
-        lineupsByRound
-      });
+      const roundsToProcess =
+        mode === "officialized_only"
+          ? officialRoundsToBackfill
+          : [
+              ...officialRoundsToBackfill,
+              ...(marketState.partialRoundNumber !== null
+                ? [marketState.partialRoundNumber]
+                : [])
+            ].filter((roundNumber, index, values) => values.indexOf(roundNumber) === index);
 
-      const persistedRounds = await this.persistRounds({
-        currentRoundNumber,
-        officialRoundNumber,
-        isLiveRound,
-        marketStatusCode: String(marketStatus.status_mercado)
-      });
+      if (roundsToProcess.length === 0) {
+        const persistedRows = await this.persistRounds({
+          persistedRounds,
+          currentRoundNumber: marketState.apiCurrentRoundNumber,
+          officialRoundNumber: marketState.officialRoundNumber,
+          partialRoundNumber: marketState.partialRoundNumber,
+          marketStatusCode: String(marketState.marketStatusCode),
+          processedRoundNumbers: []
+        });
 
+        const execution = await this.syncExecutionRepository.create({
+          triggerType,
+          status: "skipped",
+          summaryMessage: `${
+            mode === "officialized_only"
+              ? "Nenhuma rodada oficializada precisou de reprocessamento."
+              : "Nenhuma rodada precisou de reprocessamento."
+          } Estado oficial atual: ${
+            marketState.officialRoundNumber > 0
+              ? formatRoundLabel(marketState.officialRoundNumber)
+              : "nenhuma rodada oficial"
+          }.`,
+          startedAt,
+          finishedAt: new Date().toISOString(),
+          affectedRoundId:
+            persistedRows.find(
+              (round) => round.external_round_id === marketState.displayRoundNumber
+            )?.id ?? null
+        });
+
+        return { execution, currentRoundNumber: marketState.displayRoundNumber };
+      }
+
+      const persistedMatches = await this.matchRepository.listAll();
+      const roundsAfterPersist = await this.persistRounds({
+        persistedRounds,
+        currentRoundNumber: marketState.apiCurrentRoundNumber,
+        officialRoundNumber: marketState.officialRoundNumber,
+        partialRoundNumber: marketState.partialRoundNumber,
+        marketStatusCode: String(marketState.marketStatusCode),
+        processedRoundNumbers: roundsToProcess
+      });
       const roundByNumber = new Map(
-        persistedRounds.map((round) => [round.external_round_id, round])
+        roundsAfterPersist.map((round) => [round.external_round_id, round])
       );
+      const persistedRoundIdToNumber = new Map(
+        roundsAfterPersist.map((round) => [round.id, round.external_round_id])
+      );
+      const persistedOfficialMatchesByRound = new Map<number, SyncPublicMatch[]>();
 
-      await Promise.all(
-        GROUP_STAGE_ROUNDS.map(async (roundNumber) => {
-          const round = roundByNumber.get(roundNumber);
+      for (const match of persistedMatches) {
+        const roundNumber = persistedRoundIdToNumber.get(match.round_id);
+        const homeParticipant = participants.find(
+          (participant) => participant.id === match.home_participant_id
+        );
+        const awayParticipant = participants.find(
+          (participant) => participant.id === match.away_participant_id
+        );
 
-          if (!round) {
-            return;
-          }
+        if (!roundNumber || match.state !== "official" || !homeParticipant || !awayParticipant) {
+          continue;
+        }
 
-          const roundMatches = matches.filter((match) => match.roundNumber === roundNumber);
-          const roundState = roundMatches[0]?.state ?? "scheduled";
-          const roundLineups = lineupsByRound[roundNumber] ?? [];
+        const current = persistedOfficialMatchesByRound.get(roundNumber) ?? [];
+        current.push({
+          id: match.id,
+          phase: match.phase,
+          phaseSlot: match.phase_slot,
+          groupCode: this.resolveGroupCodeForParticipant(homeParticipant.staticId),
+          roundNumber,
+          state: "official",
+          homeParticipantId: homeParticipant.staticId,
+          awayParticipantId: awayParticipant.staticId,
+          homePoints:
+            typeof match.home_points === "number" ? Number(match.home_points) : null,
+          awayPoints:
+            typeof match.away_points === "number" ? Number(match.away_points) : null
+        });
+        persistedOfficialMatchesByRound.set(roundNumber, current);
+      }
 
-          await this.matchRepository.replaceRoundMatches(
-            round.id,
-            roundMatches.map((match, index) => ({
-              phase: match.phase,
-              phaseSlot: `${match.groupCode ?? "NA"}-r${roundNumber}-m${index + 1}`,
-              groupId:
-                groups.find((group) => group.code === match.groupCode)?.code
-                  ? participants.find(
-                      (participant) => participant.staticId === match.homeParticipantId
-                    )?.groupId ?? null
-                  : null,
-              roundId: round.id,
-              homeParticipantId: participants.find(
-                (participant) => participant.staticId === match.homeParticipantId
-              )!.id,
-              awayParticipantId: participants.find(
-                (participant) => participant.staticId === match.awayParticipantId
-              )!.id,
-              homePoints: match.homePoints,
-              awayPoints: match.awayPoints,
-              resultType:
-                match.homePoints === null || match.awayPoints === null
-                  ? null
-                  : this.resolveResultType(match.homePoints, match.awayPoints),
-              state: match.state,
-              decidedByRule:
-                match.homePoints === null || match.awayPoints === null
-                  ? "score"
-                  : Math.abs(match.homePoints - match.awayPoints) <= 5
-                    ? "draw_threshold"
-                    : "score"
-            }))
-          );
+      const partialIndex = buildAthletePartialIndex(athletesScored);
+      const processedRounds = new Map<number, ProcessedRound>();
 
-          const standings = this.buildStandingsForRound(
-            matches,
-            roundNumber,
-            roundState
-          );
+      for (const roundNumber of [...roundsToProcess].sort((left, right) => left - right)) {
+        const state: RoundProcessingState =
+          marketState.partialRoundNumber === roundNumber ? "partial" : "official";
+        const lineups = await this.loadLineupsForRound({
+          roundNumber,
+          state,
+          participants,
+          athleteCatalog,
+          market: athletesMarket,
+          partialIndex
+        });
+        const matches = this.buildMatchesForRound({
+          roundNumber,
+          state,
+          fixtures,
+          lineups
+        });
 
-          await this.standingsSnapshotRepository.replaceRoundSnapshots(
-            round.id,
-            standings.map((standing) => ({
-              scope: "group",
-              phase: "groups",
-              groupId: participants.find(
-                (participant) => participant.staticId === standing.participantId
-              )?.groupId ?? null,
-              participantId: participants.find(
-                (participant) => participant.staticId === standing.participantId
-              )!.id,
-              roundId: round.id,
-              points: standing.points,
-              wins: standing.wins,
-              draws: standing.draws,
-              losses: standing.losses,
-              pointsFor: standing.pointsFor,
-              pointsAgainst: standing.pointsAgainst,
-              pointsDifference: standing.pointsDifference,
-              position: standing.position,
-              statusLabel: standing.statusLabel,
-              state: roundState
-            }))
-          );
+        processedRounds.set(roundNumber, {
+          matches,
+          lineups,
+          state
+        });
+      }
 
-          await this.lineupSnapshotRepository.replaceRoundSnapshots(
-            round.id,
-            roundLineups.map((lineup) => ({
-              participantId: lineup.participantDbId,
-              roundId: round.id,
-              captainId: lineup.captainId,
-              reserveLuxuryId: lineup.reserveLuxuryId,
-              captainName:
-                lineup.captainId !== null
-                  ? athleteCatalog.get(lineup.captainId)?.name ?? null
-                  : null,
-              coachName: null,
-              formationLabel: null,
-              totalPoints: lineup.totalPoints,
-              state: roundState,
-              rawPayloadRef: lineup.rawPayloadRef,
-              players: [
-                ...lineup.starters.map((player) => ({
-                  athleteId: player.athleteId,
-                  playerName: player.playerName,
-                  clubName: player.clubName,
-                  positionName: player.positionName,
-                  captainMultiplier: lineup.captainId === player.athleteId ? 2 : 1,
-                  points: player.points,
-                  statusLabel: player.entered ? "entered" : "bench",
-                  source: "starter" as const,
-                  entered: player.entered,
-                  counted: lineup.effectivePlayers.some(
-                    (effectivePlayer) =>
-                      effectivePlayer.athleteId === player.athleteId &&
-                      effectivePlayer.source === "starter"
-                  )
-                })),
-                ...lineup.reserves.map((player) => ({
-                  athleteId: player.athleteId,
-                  playerName: player.playerName,
-                  clubName: player.clubName,
-                  positionName: player.positionName,
-                  captainMultiplier: 1,
-                  points: player.points,
-                  statusLabel: player.entered ? "reserve_entered" : "reserve_bench",
-                  source: "reserve" as const,
-                  entered: player.entered,
-                  counted: lineup.effectivePlayers.some(
-                    (effectivePlayer) =>
-                      effectivePlayer.athleteId === player.athleteId &&
-                      effectivePlayer.source === "reserve"
-                  )
-                }))
-              ]
-            }))
-          );
+      for (const roundNumber of [...processedRounds.keys()].sort((left, right) => left - right)) {
+        const processedRound = processedRounds.get(roundNumber)!;
+        const round = roundByNumber.get(roundNumber);
 
-          const mostPicked = buildMostPicked(
-            roundLineups.map((lineup) =>
-              lineup.effectivePlayers.map((player) => ({
+        if (!round) {
+          continue;
+        }
+
+        const standings = this.buildStandingsForRound({
+          roundNumber,
+          processedRounds,
+          persistedOfficialMatchesByRound
+        });
+
+        await this.matchRepository.replaceRoundMatches(
+          round.id,
+          processedRound.matches.map((match) => ({
+            phase: match.phase,
+            phaseSlot: match.phaseSlot,
+            groupId:
+              participants.find((participant) => participant.staticId === match.homeParticipantId)
+                ?.groupId ?? null,
+            roundId: round.id,
+            homeParticipantId: participants.find(
+              (participant) => participant.staticId === match.homeParticipantId
+            )!.id,
+            awayParticipantId: participants.find(
+              (participant) => participant.staticId === match.awayParticipantId
+            )!.id,
+            homePoints: match.homePoints,
+            awayPoints: match.awayPoints,
+            resultType:
+              match.homePoints === null || match.awayPoints === null
+                ? null
+                : this.resolveResultType(match.homePoints, match.awayPoints),
+            state: processedRound.state,
+            decidedByRule:
+              match.homePoints === null || match.awayPoints === null
+                ? "score"
+                : Math.abs(match.homePoints - match.awayPoints) <= 5
+                  ? "draw_threshold"
+                  : "score"
+          }))
+        );
+
+        await this.standingsSnapshotRepository.replaceRoundSnapshots(
+          round.id,
+          standings.map((standing) => ({
+            scope: "group",
+            phase: "groups",
+            groupId:
+              participants.find((participant) => participant.staticId === standing.participantId)
+                ?.groupId ?? null,
+            participantId: participants.find(
+              (participant) => participant.staticId === standing.participantId
+            )!.id,
+            roundId: round.id,
+            points: standing.points,
+            wins: standing.wins,
+            draws: standing.draws,
+            losses: standing.losses,
+            pointsFor: standing.pointsFor,
+            pointsAgainst: standing.pointsAgainst,
+            pointsDifference: standing.pointsDifference,
+            position: standing.position,
+            statusLabel: standing.statusLabel,
+            state: processedRound.state
+          }))
+        );
+
+        await this.lineupSnapshotRepository.replaceRoundSnapshots(
+          round.id,
+          processedRound.lineups.map((lineup) => ({
+            participantId: lineup.participantDbId,
+            roundId: round.id,
+            captainId: lineup.captainId,
+            reserveLuxuryId: lineup.reserveLuxuryId,
+            captainName:
+              lineup.captainId !== null
+                ? athleteCatalog.get(lineup.captainId)?.name ?? null
+                : null,
+            coachName: null,
+            formationLabel: null,
+            totalPoints: lineup.totalPoints,
+            state: processedRound.state,
+            rawPayloadRef: lineup.rawPayloadRef,
+            players: [
+              ...lineup.starters.map((player) => ({
                 athleteId: player.athleteId,
                 playerName: player.playerName,
                 clubName: player.clubName,
-                positionName: player.positionName
+                positionName: player.positionName,
+                captainMultiplier: lineup.captainId === player.athleteId ? 1 : 1,
+                points: player.points,
+                statusLabel: player.entered ? "entered" : "bench",
+                source: "starter" as const,
+                entered: player.entered,
+                counted: lineup.effectivePlayers.some(
+                  (effectivePlayer) =>
+                    effectivePlayer.athleteId === player.athleteId &&
+                    effectivePlayer.source === "starter"
+                )
+              })),
+              ...lineup.reserves.map((player) => ({
+                athleteId: player.athleteId,
+                playerName: player.playerName,
+                clubName: player.clubName,
+                positionName: player.positionName,
+                captainMultiplier: 1,
+                points: player.points,
+                statusLabel: player.entered ? "reserve_entered" : "reserve_bench",
+                source: "reserve" as const,
+                entered: player.entered,
+                counted: lineup.effectivePlayers.some(
+                  (effectivePlayer) =>
+                    effectivePlayer.athleteId === player.athleteId &&
+                    effectivePlayer.source === "reserve"
+                )
               }))
-            )
-          );
+            ]
+          }))
+        );
 
-          await this.mostPickedRepository.replaceRoundSnapshots(
-            round.id,
-            mostPicked.map((player) => ({
-              roundId: round.id,
+        const mostPicked = buildMostPicked(
+          processedRound.lineups.map((lineup) =>
+            lineup.starters.map((player) => ({
               athleteId: player.athleteId,
               playerName: player.playerName,
-              clubName: player.clubName ?? null,
-              positionName: player.positionName ?? null,
-              pickCount: player.pickCount,
-              rankPosition: player.rankPosition,
-              state: roundState
+              clubName: player.clubName,
+              positionName: player.positionName
             }))
-          );
-        })
-      );
+          )
+        );
 
-      const affectedRound = roundByNumber.get(currentRoundNumber) ?? null;
-      const finishedAt = new Date().toISOString();
+        await this.mostPickedRepository.replaceRoundSnapshots(
+          round.id,
+          mostPicked.map((player) => ({
+            roundId: round.id,
+            athleteId: player.athleteId,
+            playerName: player.playerName,
+            clubName: player.clubName ?? null,
+            positionName: player.positionName ?? null,
+            pickCount: player.pickCount,
+            rankPosition: player.rankPosition,
+            state: processedRound.state
+          }))
+        );
+      }
+
+      const affectedRoundNumber =
+        marketState.partialRoundNumber ?? marketState.officialRoundNumber;
+      const affectedRound = roundByNumber.get(affectedRoundNumber) ?? null;
       const execution = await this.syncExecutionRepository.create({
         triggerType,
         status: "success",
-        summaryMessage: `Sync concluido para ${this.formatRoundLabel(currentRoundNumber)} com ${matches.filter((match) => match.state !== "scheduled").length} jogos consolidados.`,
+        summaryMessage:
+          mode === "officialized_only"
+            ? `Sincronizacao de rodadas oficializadas concluida com ${roundsToProcess.length} rodada(s) processada(s).`
+            : `Sync concluido para ${formatRoundLabel(marketState.displayRoundNumber)} com ${roundsToProcess.length} rodada(s) processada(s).`,
         startedAt,
-        finishedAt,
+        finishedAt: new Date().toISOString(),
         affectedRoundId: affectedRound?.id ?? null
       });
 
       return {
         execution,
-        currentRoundNumber,
-        officialRoundNumber,
-        matchCount: matches.length,
-        lineupCount: Object.values(lineupsByRound).flat().length
+        currentRoundNumber: marketState.displayRoundNumber
       };
     } catch (error) {
       const execution = await this.syncExecutionRepository.create({
@@ -434,67 +524,79 @@ export class SyncService {
     }
   }
 
+  private isOfficialRoundPersisted(
+    roundNumber: number,
+    persistedRounds: Awaited<ReturnType<RoundRepository["listAll"]>>
+  ) {
+    const round = persistedRounds.find((item) => item.external_round_id === roundNumber);
+    return round?.status === "official" && Boolean(round.last_synced_at);
+  }
+
   private async persistRounds({
+    persistedRounds,
     currentRoundNumber,
     officialRoundNumber,
-    isLiveRound,
-    marketStatusCode
+    partialRoundNumber,
+    marketStatusCode,
+    processedRoundNumbers
   }: {
+    persistedRounds: Awaited<ReturnType<RoundRepository["listAll"]>>;
     currentRoundNumber: number;
     officialRoundNumber: number;
-    isLiveRound: boolean;
+    partialRoundNumber: number | null;
     marketStatusCode: string;
+    processedRoundNumbers: number[];
   }) {
-    const lastSyncedAt = new Date().toISOString();
+    const syncedAt = new Date().toISOString();
+    const processedSet = new Set(processedRoundNumbers);
 
     return Promise.all(
-      GROUP_STAGE_ROUNDS.map((roundNumber) =>
-        this.roundRepository.upsert({
+      GROUP_STAGE_ROUNDS.map((roundNumber) => {
+        const existing = persistedRounds.find((round) => round.external_round_id === roundNumber);
+        const status = this.resolveRoundStatus({
+          roundNumber,
+          officialRoundNumber,
+          partialRoundNumber
+        });
+
+        return this.roundRepository.upsert({
           externalRoundId: roundNumber,
-          name: this.formatRoundLabel(roundNumber),
-          status: this.resolveRoundStatus({
-            roundNumber,
-            currentRoundNumber,
-            officialRoundNumber,
-            isLiveRound
-          }),
+          name: formatRoundLabel(roundNumber),
+          status,
           marketStatus: marketStatusCode,
           officializedAt:
-            roundNumber <= officialRoundNumber ? lastSyncedAt : null,
-          lastSyncedAt,
-          sourceVersion: [
-            `current:${currentRoundNumber}`,
-            `official:${officialRoundNumber}`,
-            `live:${isLiveRound}`
-          ].join("|")
-        })
-      )
+            status === "official" ? existing?.officialized_at ?? syncedAt : null,
+          lastSyncedAt: processedSet.has(roundNumber)
+            ? syncedAt
+            : existing?.last_synced_at ?? null,
+          sourceVersion: processedSet.has(roundNumber)
+            ? [
+                `current:${currentRoundNumber}`,
+                `official:${officialRoundNumber}`,
+                `partial:${partialRoundNumber ?? "none"}`,
+                `market:${marketStatusCode}`
+              ].join("|")
+            : existing?.source_version ?? null
+        });
+      })
     );
   }
 
   private resolveRoundStatus({
     roundNumber,
-    currentRoundNumber,
     officialRoundNumber,
-    isLiveRound
+    partialRoundNumber
   }: {
     roundNumber: number;
-    currentRoundNumber: number;
     officialRoundNumber: number;
-    isLiveRound: boolean;
+    partialRoundNumber: number | null;
   }): RoundStatus {
-    if (roundNumber < currentRoundNumber && roundNumber <= officialRoundNumber) {
-      return "official";
+    if (partialRoundNumber !== null && roundNumber === partialRoundNumber) {
+      return "live";
     }
 
-    if (roundNumber === currentRoundNumber) {
-      if (isLiveRound) {
-        return "live";
-      }
-
-      if (roundNumber <= officialRoundNumber) {
-        return "official";
-      }
+    if (roundNumber <= officialRoundNumber) {
+      return "official";
     }
 
     return "scheduled";
@@ -509,9 +611,7 @@ export class SyncService {
 
     return participants.map((participant) => {
       const staticParticipant =
-        staticParticipants.find(
-          (item) => item.cartolaTeamId === participant.cartola_team_id
-        ) ??
+        staticParticipants.find((item) => item.cartolaTeamId === participant.cartola_team_id) ??
         resolveParticipantByCountry(participant.represented_country);
 
       if (!staticParticipant) {
@@ -524,69 +624,75 @@ export class SyncService {
       return {
         id: participant.id,
         groupId: participant.group_id,
-        representedCountry: participant.represented_country,
         cartolaTeamId: participant.cartola_team_id,
-        cartolaTeamName: participant.cartola_team_name,
         staticId: staticParticipant.id
       };
     });
   }
 
-  private async loadLineupsByRound(
-    currentRoundNumber: number,
-    participants: SyncParticipant[],
-    athleteCatalog: Map<number, AthleteCatalogEntry>,
-    market: CartolaAthletesMarketPayload | null
-  ) {
-    const lineupsByRound: Record<number, NormalizedLineup[]> = {};
-
-    await Promise.all(
-      GROUP_STAGE_ROUNDS.filter((roundNumber) => roundNumber <= currentRoundNumber).map(
-        async (roundNumber) => {
-          const results = await Promise.allSettled(
-            participants.map((participant) =>
-              cartolaClient.getTeamById(participant.cartolaTeamId, roundNumber)
-            )
-          );
-
-          lineupsByRound[roundNumber] = results.flatMap((result, index) => {
-            if (result.status === "rejected") {
-              return [];
-            }
-
-            const participant = participants[index]!;
-            const normalized = this.normalizeLineupSnapshot({
-              requestedRoundNumber: roundNumber,
-              currentRoundNumber,
-              lineup: result.value,
-              participant,
-              athleteCatalog,
-              market
-            });
-
-            return normalized ? [normalized] : [];
-          });
-        }
-      )
+  private async loadLineupsForRound({
+    roundNumber,
+    state,
+    participants,
+    athleteCatalog,
+    market,
+    partialIndex
+  }: {
+    roundNumber: number;
+    state: RoundProcessingState;
+    participants: SyncParticipant[];
+    athleteCatalog: Map<number, ReturnType<typeof mapAthleteCatalog> extends Map<number, infer T> ? T : never>;
+    market: CartolaAthletesMarketPayload | null;
+    partialIndex: ReturnType<typeof buildAthletePartialIndex>;
+  }) {
+    const results = await Promise.allSettled(
+      participants.map((participant) => cartolaClient.getTeamById(participant.cartolaTeamId, roundNumber))
     );
 
-    return lineupsByRound;
+    return results.flatMap((result, index) => {
+      if (result.status === "rejected") {
+        return [];
+      }
+
+      const participant = participants[index]!;
+      const normalized = this.normalizeLineupSnapshot({
+        requestedRoundNumber: roundNumber,
+        lineup: result.value,
+        athleteCatalog,
+        market,
+        partialIndex,
+        state
+      });
+
+      if (!normalized) {
+        return [];
+      }
+
+      return [
+        {
+          ...normalized,
+          participantDbId: participant.id,
+          participantStaticId: participant.staticId,
+          rawPayloadRef: `team:${participant.cartolaTeamId}:round:${roundNumber}`
+        }
+      ];
+    });
   }
 
   private normalizeLineupSnapshot({
     requestedRoundNumber,
-    currentRoundNumber,
     lineup,
-    participant,
     athleteCatalog,
-    market
+    market,
+    partialIndex,
+    state
   }: {
     requestedRoundNumber: number;
-    currentRoundNumber: number;
     lineup: CartolaLineupPayload;
-    participant: SyncParticipant;
-    athleteCatalog: Map<number, AthleteCatalogEntry>;
+    athleteCatalog: Map<number, ReturnType<typeof mapAthleteCatalog> extends Map<number, infer T> ? T : never>;
     market: CartolaAthletesMarketPayload | null;
+    partialIndex: ReturnType<typeof buildAthletePartialIndex>;
+    state: RoundProcessingState;
   }): NormalizedLineup | null {
     const allPlayers = [...lineup.atletas, ...lineup.reservas];
     const detectedRounds = [
@@ -598,235 +704,85 @@ export class SyncService {
     ];
     const detectedRound = detectedRounds.length === 1 ? detectedRounds[0] : null;
 
-    if (
-      requestedRoundNumber === currentRoundNumber &&
-      detectedRound !== requestedRoundNumber
-    ) {
+    if (detectedRound !== null && detectedRound !== requestedRoundNumber) {
       return null;
     }
 
-    if (
-      requestedRoundNumber < currentRoundNumber &&
-      detectedRound !== null &&
-      detectedRound !== requestedRoundNumber
-    ) {
-      return null;
+    if (state === "partial") {
+      return buildPartialLineupSnapshot({
+        roundNumber: requestedRoundNumber,
+        lineup,
+        athleteCatalog,
+        market,
+        partialIndex
+      });
     }
 
-    const starters = lineup.atletas.map((player) =>
-      this.mapLineupPlayer(player, athleteCatalog, market, "starter")
-    );
-    const reserves = lineup.reservas.map((player) =>
-      this.mapLineupPlayer(player, athleteCatalog, market, "reserve")
-    );
-
-    return {
-      participantDbId: participant.id,
-      participantStaticId: participant.staticId,
+    return buildOfficialLineupSnapshot({
       roundNumber: requestedRoundNumber,
-      totalPoints: typeof lineup.pontos === "number" ? lineup.pontos : 0,
-      captainId: lineup.capitao_id ?? null,
-      reserveLuxuryId: lineup.reserva_luxo_id ?? null,
-      starters,
-      reserves,
-      effectivePlayers: this.resolveEffectivePlayers(starters, reserves),
-      rawPayloadRef: `team:${participant.cartolaTeamId}:round:${requestedRoundNumber}`
-    };
-  }
-
-  private mapLineupPlayer(
-    player: {
-      atleta_id: number;
-      apelido: string;
-      pontos_num?: number | null;
-      posicao_id: number;
-      clube_id: number;
-      entrou_em_campo?: boolean | null;
-    },
-    athleteCatalog: Map<number, AthleteCatalogEntry>,
-    market: CartolaAthletesMarketPayload | null,
-    source: "starter" | "reserve"
-  ): NormalizedPlayer {
-    const catalogEntry = athleteCatalog.get(player.atleta_id);
-
-    return {
-      athleteId: player.atleta_id,
-      playerName: catalogEntry?.name ?? player.apelido,
-      clubName: catalogEntry
-        ? market?.clubes[String(catalogEntry.clubId)]?.nome ?? String(catalogEntry.clubId)
-        : null,
-      positionName: catalogEntry
-        ? market?.posicoes[String(catalogEntry.positionId)]?.nome ??
-          String(catalogEntry.positionId)
-        : null,
-      positionId: player.posicao_id,
-      points: typeof player.pontos_num === "number" ? player.pontos_num : 0,
-      entered: player.entrou_em_campo !== false,
-      source
-    };
-  }
-
-  private resolveEffectivePlayers(starters: NormalizedPlayer[], reserves: NormalizedPlayer[]) {
-    const effectivePlayers = starters.filter((player) => player.entered);
-    const unusedReserves = [...reserves];
-
-    for (const starter of starters.filter((player) => !player.entered)) {
-      const reserveIndex = unusedReserves.findIndex(
-        (reserve) =>
-          reserve.entered && reserve.positionId === starter.positionId
-      );
-
-      if (reserveIndex >= 0) {
-        effectivePlayers.push(unusedReserves[reserveIndex]!);
-        unusedReserves.splice(reserveIndex, 1);
-      }
-    }
-
-    return effectivePlayers;
-  }
-
-  private getOfficialRoundNumber(
-    lineupsByRound: Record<number, NormalizedLineup[]>,
-    currentRoundNumber: number
-  ) {
-    return GROUP_STAGE_ROUNDS.filter((roundNumber) => roundNumber <= currentRoundNumber)
-      .filter((roundNumber) => (lineupsByRound[roundNumber] ?? []).length > 0)
-      .reduce((maxRound, roundNumber) => Math.max(maxRound, roundNumber), 0);
-  }
-
-  private buildMatches({
-    currentRoundNumber,
-    officialRoundNumber,
-    isLiveRound,
-    fixtures,
-    lineupsByRound
-  }: {
-    currentRoundNumber: number;
-    officialRoundNumber: number;
-    isLiveRound: boolean;
-    fixtures: Awaited<ReturnType<typeof cartolaClient.getFixtures>>;
-    lineupsByRound: Record<number, NormalizedLineup[]>;
-  }) {
-    const currentFixtureMatches = this.mapCurrentRoundFixtures(fixtures);
-    const matches: SyncPublicMatch[] = [];
-
-    for (const roundNumber of GROUP_STAGE_ROUNDS) {
-      const baseMatches =
-        roundNumber === currentRoundNumber && currentFixtureMatches.length > 0
-          ? currentFixtureMatches
-          : this.buildRoundTemplates(roundNumber);
-      const pointsByParticipantId = new Map(
-        (lineupsByRound[roundNumber] ?? []).map((lineup) => [
-          lineup.participantStaticId,
-          lineup.totalPoints
-        ])
-      );
-      const roundState =
-        roundNumber < currentRoundNumber && roundNumber <= officialRoundNumber
-          ? "official"
-          : roundNumber === currentRoundNumber
-            ? isLiveRound
-              ? "partial"
-              : roundNumber <= officialRoundNumber
-                ? "official"
-                : "scheduled"
-            : "scheduled";
-
-      for (const match of baseMatches) {
-        matches.push({
-          ...match,
-          state: roundState,
-          homePoints:
-            roundState === "scheduled"
-              ? null
-              : Number(
-                  (pointsByParticipantId.get(match.homeParticipantId) ?? 0).toFixed(2)
-                ),
-          awayPoints:
-            roundState === "scheduled"
-              ? null
-              : Number(
-                  (pointsByParticipantId.get(match.awayParticipantId) ?? 0).toFixed(2)
-                )
-        });
-      }
-    }
-
-    return matches;
-  }
-
-  private buildRoundTemplates(roundNumber: number) {
-    const pairings = ROUND_PAIRINGS[roundNumber] ?? [];
-
-    return groups.flatMap((group) =>
-      pairings.map(([homeIndex, awayIndex], matchIndex) => {
-        const home = group.participants[homeIndex]!;
-        const away = group.participants[awayIndex]!;
-
-        return {
-          id: `${group.code}-r${roundNumber}-m${matchIndex + 1}`,
-          phase: "groups",
-          phaseSlot: `${group.code}-r${roundNumber}-m${matchIndex + 1}`,
-          groupCode: group.code,
-          roundNumber,
-          homeParticipantId: home.id,
-          awayParticipantId: away.id,
-          homePoints: null,
-          awayPoints: null
-        };
-      })
-    );
-  }
-
-  private mapCurrentRoundFixtures(fixtures: Awaited<ReturnType<typeof cartolaClient.getFixtures>>) {
-    return fixtures.partidas.flatMap((fixture, index) => {
-      const home = resolveParticipantByCountry(
-        fixtures.clubes[String(fixture.clube_casa_id)]?.nome ?? ""
-      );
-      const away = resolveParticipantByCountry(
-        fixtures.clubes[String(fixture.clube_visitante_id)]?.nome ?? ""
-      );
-
-      if (!home || !away) {
-        return [];
-      }
-
-      return [
-        {
-          id: String(fixture.partida_id),
-          phase: "groups",
-          phaseSlot: `${home.groupCode}-r${fixtures.rodada}-m${index + 1}`,
-          groupCode: home.groupCode,
-          roundNumber: fixtures.rodada,
-          homeParticipantId: home.id,
-          awayParticipantId: away.id,
-          homePoints: null,
-          awayPoints: null
-        }
-      ];
+      lineup,
+      athleteCatalog,
+      market
     });
   }
 
-  private buildStandingsForRound(
-    matches: SyncPublicMatch[],
-    roundNumber: number,
-    roundState: "partial" | "official" | "scheduled"
-  ) {
-    if (roundState === "scheduled") {
-      return [];
-    }
-
-    const effectiveMatches = matches.filter(
-      (match) =>
-        match.roundNumber <= roundNumber &&
-        match.homePoints !== null &&
-        match.awayPoints !== null
+  private buildMatchesForRound({
+    roundNumber,
+    state,
+    fixtures,
+    lineups
+  }: {
+    roundNumber: number;
+    state: RoundProcessingState;
+    fixtures: Awaited<ReturnType<typeof cartolaClient.getFixtures>>;
+    lineups: Array<
+      NormalizedLineup & {
+        participantDbId: string;
+        participantStaticId: string;
+        rawPayloadRef: string;
+      }
+    >;
+  }) {
+    const baseMatches =
+      state === "partial" && fixtures.rodada === roundNumber
+        ? this.mapCurrentRoundFixtures(fixtures)
+        : this.buildRoundTemplates(roundNumber);
+    const pointsByParticipantId = new Map(
+      lineups.map((lineup) => [lineup.participantStaticId, lineup.totalPoints])
     );
 
+    return baseMatches.map((match) => ({
+      ...match,
+      state,
+      homePoints: Number((pointsByParticipantId.get(match.homeParticipantId) ?? 0).toFixed(2)),
+      awayPoints: Number((pointsByParticipantId.get(match.awayParticipantId) ?? 0).toFixed(2))
+    }));
+  }
+
+  private buildStandingsForRound({
+    roundNumber,
+    processedRounds,
+    persistedOfficialMatchesByRound
+  }: {
+    roundNumber: number;
+    processedRounds: Map<number, ProcessedRound>;
+    persistedOfficialMatchesByRound: Map<number, SyncPublicMatch[]>;
+  }) {
+    const effectiveMatches: SyncPublicMatch[] = [];
+
+    for (const currentRound of GROUP_STAGE_ROUNDS.filter((value) => value <= roundNumber)) {
+      const processed = processedRounds.get(currentRound);
+
+      if (processed) {
+        effectiveMatches.push(...processed.matches);
+        continue;
+      }
+
+      effectiveMatches.push(...(persistedOfficialMatchesByRound.get(currentRound) ?? []));
+    }
+
     return groups.flatMap((group) => {
-      const groupMatches = effectiveMatches.filter(
-        (match) => match.groupCode === group.code
-      );
+      const groupMatches = effectiveMatches.filter((match) => match.groupCode === group.code);
       const standingInput: GroupMatch[] = groupMatches.map((match) => ({
         homeParticipantId: match.homeParticipantId,
         awayParticipantId: match.awayParticipantId,
@@ -859,6 +815,64 @@ export class SyncService {
     return homePoints > awayPoints ? "home_win" : "away_win";
   }
 
+  private buildRoundTemplates(roundNumber: number) {
+    const pairings = ROUND_PAIRINGS[roundNumber] ?? [];
+
+    return groups.flatMap((group) =>
+      pairings.map(([homeIndex, awayIndex], matchIndex) => {
+        const home = group.participants[homeIndex]!;
+        const away = group.participants[awayIndex]!;
+
+        return {
+          id: `${group.code}-r${roundNumber}-m${matchIndex + 1}`,
+          phase: "groups",
+          phaseSlot: `${group.code}-r${roundNumber}-m${matchIndex + 1}`,
+          groupCode: group.code,
+          roundNumber,
+          homeParticipantId: home.id,
+          awayParticipantId: away.id,
+          homePoints: null,
+          awayPoints: null
+        };
+      })
+    );
+  }
+
+  private resolveGroupCodeForParticipant(staticParticipantId: string) {
+    return groups.find((group) =>
+      group.participants.some((participant) => participant.id === staticParticipantId)
+    )?.code ?? null;
+  }
+
+  private mapCurrentRoundFixtures(fixtures: Awaited<ReturnType<typeof cartolaClient.getFixtures>>) {
+    return fixtures.partidas.flatMap((fixture, index) => {
+      const home = resolveParticipantByCountry(
+        fixtures.clubes[String(fixture.clube_casa_id)]?.nome ?? ""
+      );
+      const away = resolveParticipantByCountry(
+        fixtures.clubes[String(fixture.clube_visitante_id)]?.nome ?? ""
+      );
+
+      if (!home || !away) {
+        return [];
+      }
+
+      return [
+        {
+          id: String(fixture.partida_id),
+          phase: "groups",
+          phaseSlot: `${home.groupCode}-r${fixtures.rodada}-m${index + 1}`,
+          groupCode: home.groupCode,
+          roundNumber: fixtures.rodada,
+          homeParticipantId: home.id,
+          awayParticipantId: away.id,
+          homePoints: null,
+          awayPoints: null
+        }
+      ];
+    });
+  }
+
   private resolveCurrentRoundFromRows(
     rounds: Array<{
       external_round_id: number;
@@ -874,23 +888,14 @@ export class SyncService {
       return liveRound;
     }
 
-    const officialRoundNumber = rounds
+    const officialRound = [...rounds]
       .filter((round) => round.status === "official")
-      .reduce((maxRound, round) => Math.max(maxRound, round.external_round_id), 0);
+      .sort((left, right) => right.external_round_id - left.external_round_id)[0];
 
-    const nextScheduledRound = rounds
-      .filter((round) => round.status === "scheduled")
-      .sort((left, right) => left.external_round_id - right.external_round_id)
-      .find((round) => round.external_round_id > officialRoundNumber);
+    if (officialRound) {
+      return officialRound;
+    }
 
-    return (
-      nextScheduledRound ??
-      rounds.sort((left, right) => right.external_round_id - left.external_round_id)[0] ??
-      null
-    );
-  }
-
-  private formatRoundLabel(roundNumber: number) {
-    return `${roundNumber}a rodada`;
+    return rounds.sort((left, right) => left.external_round_id - right.external_round_id)[0] ?? null;
   }
 }

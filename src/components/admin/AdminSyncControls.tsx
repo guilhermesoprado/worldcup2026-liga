@@ -14,14 +14,21 @@ export function AdminSyncControls({
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const runAction = (action: "sync" | "toggle") => {
+  const runAction = (action: "sync" | "sync_officialized" | "toggle") => {
     setMessage(null);
 
     startTransition(async () => {
       try {
-        if (action === "sync") {
+        if (action === "sync" || action === "sync_officialized") {
           const response = await fetch("/api/admin/sync", {
-            method: "POST"
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json"
+            },
+            body:
+              action === "sync_officialized"
+                ? JSON.stringify({ mode: "officialized" })
+                : undefined
           });
           const body = (await response.json()) as { execution?: { summary_message?: string }; message?: string };
 
@@ -66,6 +73,14 @@ export function AdminSyncControls({
         disabled={isPending}
       >
         {isPending ? "processando..." : "sync now"}
+      </button>
+      <button
+        type="button"
+        className="admin-button"
+        onClick={() => runAction("sync_officialized")}
+        disabled={isPending}
+      >
+        {isPending ? "processando..." : "sincronizar rodadas oficializadas"}
       </button>
       <button
         type="button"
