@@ -704,7 +704,14 @@ export class SyncService {
     ];
     const detectedRound = detectedRounds.length === 1 ? detectedRounds[0] : null;
 
-    if (detectedRound !== null && detectedRound !== requestedRoundNumber) {
+    // Partial lineups can arrive with stale or mixed `rodada_id` values even when
+    // the roster itself is the current valid lineup. Only reject explicit round
+    // mismatches for official snapshots, where the API response must be fixed.
+    if (
+      state === "official" &&
+      detectedRound !== null &&
+      detectedRound !== requestedRoundNumber
+    ) {
       return null;
     }
 

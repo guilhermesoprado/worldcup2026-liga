@@ -19,4 +19,16 @@ export class ParticipantRepository extends BaseRepository {
     if (error) throw error;
     return data;
   }
+
+  async getByCartolaTeamId(cartolaTeamId: number) {
+    const db = this.ensureDb();
+    const { data, error } = await db
+      .from("participants")
+      .select("*")
+      .eq("cartola_team_id", cartolaTeamId)
+      .maybeSingle();
+
+    if (error) throw error;
+    return data;
+  }
 }

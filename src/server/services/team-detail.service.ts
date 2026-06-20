@@ -59,9 +59,15 @@ export class TeamDetailService {
   }
 
   private async getPersistedTeamDetail(teamId: string, roundNumber: number) {
+    const participant = participants.find((item) => item.id === teamId);
+
+    if (!participant) {
+      return null;
+    }
+
     const [round, participantRecord] = await Promise.all([
       this.roundRepository.getByExternalRoundId(roundNumber),
-      this.participantRepository.getById(teamId)
+      this.participantRepository.getByCartolaTeamId(participant.cartolaTeamId)
     ]);
 
     if (!round || !participantRecord) {
@@ -91,8 +97,6 @@ export class TeamDetailService {
     const effectivePlayers = this.sortPlayersByPosition(
       players.filter((player) => player.counted).map((player) => this.mapPersistedPlayer(player))
     );
-
-    const participant = participants.find((item) => item.id === teamId)!;
 
     const detail: PublicTeamDetail = {
       participantId: participant.id,
