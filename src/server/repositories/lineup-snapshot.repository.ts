@@ -3,6 +3,7 @@ import { BaseRepository } from "@/server/repositories/base.repository";
 type ReplaceLineupPlayerInput = {
   athleteId: number;
   playerName: string;
+  photoUrl: string | null;
   clubName: string | null;
   positionName: string | null;
   captainMultiplier: number;
@@ -153,6 +154,7 @@ export class LineupSnapshotRepository extends BaseRepository {
         lineup_snapshot_id: lineupSnapshotId,
         athlete_id: player.athleteId,
         player_name: player.playerName,
+        photo_url: player.photoUrl,
         club_name: player.clubName,
         position_name: player.positionName,
         captain_multiplier: player.captainMultiplier,
@@ -166,7 +168,26 @@ export class LineupSnapshotRepository extends BaseRepository {
 
     if (players.length > 0) {
       const { error: insertPlayersError } = await db.from("lineup_players").insert(players);
-      if (insertPlayersError) throw insertPlayersError;
+
+      if (insertPlayersError) {
+        const message = JSON.stringify(insertPlayersError).toLowerCase();
+        const missingPhotoColumn =
+          message.includes("photo_url") &&
+          (message.includes("column") || message.includes("schema cache") || message.includes("does not exist"));
+
+        if (!missingPhotoColumn) {
+          throw insertPlayersError;
+        }
+
+        const fallbackPlayers = players.map(({ photo_url: _photoUrl, ...player }) => player);
+        const { error: fallbackInsertPlayersError } = await db
+          .from("lineup_players")
+          .insert(fallbackPlayers);
+
+        if (fallbackInsertPlayersError) {
+          throw fallbackInsertPlayersError;
+        }
+      }
     }
 
     return insertedSnapshots ?? [];

@@ -1,10 +1,10 @@
-import { LivePublicDataService } from "@/server/services/live-public-data.service";
+import { PublicReadinessService } from "@/server/services/public-readiness.service";
 
 export class MostPickedService {
-  private readonly livePublicDataService = new LivePublicDataService();
+  private readonly publicReadinessService = new PublicReadinessService();
 
   async getMostPicked(roundId?: string | null) {
-    const liveSnapshot = await this.livePublicDataService.getSnapshot();
+    const liveSnapshot = await this.publicReadinessService.ensurePublicDataReady();
     const selectedRoundNumber = this.resolveRoundNumber(
       roundId,
       liveSnapshot.availableRounds,

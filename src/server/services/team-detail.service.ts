@@ -1,21 +1,24 @@
 import { participants } from "@/domain/participants/static-league-data";
-import {
-  buildAthletePartialIndex,
-  buildOfficialLineupSnapshot,
-  buildPartialLineupSnapshot
-} from "@/domain/sync/lineup-score";
-import { formatRoundLabel, resolveMarketState } from "@/domain/sync/market-state";
-import { cartolaClient } from "@/lib/cartola/client";
-import { mapAthleteCatalog } from "@/lib/cartola/mappers";
+import { formatRoundLabel } from "@/domain/sync/market-state";
 import { LineupSnapshotRepository } from "@/server/repositories/lineup-snapshot.repository";
 import { ParticipantRepository } from "@/server/repositories/participant.repository";
 import { RoundRepository } from "@/server/repositories/round.repository";
+import { PublicReadinessService } from "@/server/services/public-readiness.service";
 import type { PublicLineupPlayer, PublicTeamDetail } from "@/types/public";
+
+function normalizeCartolaPhotoUrl(photoUrl: string | null | undefined) {
+  if (!photoUrl) {
+    return null;
+  }
+
+  return photoUrl.replace("FORMATO", "220x220");
+}
 
 export class TeamDetailService {
   private readonly roundRepository = new RoundRepository();
   private readonly participantRepository = new ParticipantRepository();
   private readonly lineupSnapshotRepository = new LineupSnapshotRepository();
+  private readonly publicReadinessService = new PublicReadinessService();
 
   async getTeamDetail(teamId: string, roundId?: string | null) {
     const participant = participants.find((item) => item.id === teamId);
@@ -27,14 +30,63 @@ export class TeamDetailService {
       };
     }
 
-    const selectedRoundNumber = await this.resolveSelectedRoundNumber(roundId);
-    const persistedDetail = await this.getPersistedTeamDetail(teamId, selectedRoundNumber);
+    await this.publicReadinessService.ensurePublicDataReady();
+
+    const selectedRoundNumber = await this.resolveSelectedRoundNumberSafely(roundId);
+    const persistedDetail = await this.getPersistedTeamDetailSafely(teamId, selectedRoundNumber);
 
     if (persistedDetail) {
       return persistedDetail;
     }
 
-    return this.getFallbackLiveTeamDetail(participant, selectedRoundNumber);
+    const persistedRound = await this.getRoundSafely(selectedRoundNumber);
+
+    return {
+      participantId: participant.id,
+      owner: participant.owner,
+      country: participant.country,
+      cartolaTeamName: participant.cartolaTeamName,
+      roundNumber: selectedRoundNumber,
+      roundLabel: formatRoundLabel(selectedRoundNumber),
+      state: persistedRound?.status === "live" ? ("partial" as const) : ("official" as const),
+      totalPoints: 0,
+      starters: [],
+      reserves: [],
+      effectivePlayers: [],
+      captainId: null,
+      reserveLuxuryId: null,
+      usesLiveData: false
+    };
+  }
+
+  private async resolveSelectedRoundNumberSafely(roundId?: string | null) {
+    try {
+      return await this.resolveSelectedRoundNumber(roundId);
+    } catch {
+      const parsedRound = Number(roundId);
+
+      if (Number.isInteger(parsedRound) && parsedRound > 0) {
+        return parsedRound;
+      }
+
+      return 1;
+    }
+  }
+
+  private async getPersistedTeamDetailSafely(teamId: string, roundNumber: number) {
+    try {
+      return await this.getPersistedTeamDetail(teamId, roundNumber);
+    } catch {
+      return null;
+    }
+  }
+
+  private async getRoundSafely(roundNumber: number) {
+    try {
+      return await this.roundRepository.getByExternalRoundId(roundNumber);
+    } catch {
+      return null;
+    }
   }
 
   private async resolveSelectedRoundNumber(roundId?: string | null) {
@@ -84,16 +136,12 @@ export class TeamDetailService {
     }
 
     const players = lineupWithPlayers.players;
-    const starters = this.sortPlayersByPosition(
-      players
-        .filter((player) => player.source === "starter")
-        .map((player) => this.mapPersistedPlayer(player))
-    );
-    const reserves = this.sortPlayersByPosition(
-      players
-        .filter((player) => player.source === "reserve")
-        .map((player) => this.mapPersistedPlayer(player))
-    );
+    const starters = players
+      .filter((player) => player.source === "starter")
+      .map((player) => this.mapPersistedPlayer(player));
+    const reserves = players
+      .filter((player) => player.source === "reserve")
+      .map((player) => this.mapPersistedPlayer(player));
     const effectivePlayers = this.sortPlayersByPosition(
       players.filter((player) => player.counted).map((player) => this.mapPersistedPlayer(player))
     );
@@ -118,115 +166,29 @@ export class TeamDetailService {
     return detail;
   }
 
-  private async getFallbackLiveTeamDetail(
-    participant: (typeof participants)[number],
-    selectedRoundNumber: number
-  ) {
-    const [marketStatus, market, athletesScored] = await Promise.all([
-      cartolaClient.getMarketStatus(),
-      cartolaClient.getAthletesMarket().catch(() => null),
-      cartolaClient.getAthletesScored().catch(() => null)
-    ]);
-    const marketState = resolveMarketState(marketStatus);
-    const athleteCatalog = market
-      ? mapAthleteCatalog(market)
-      : new Map<number, { name: string; clubId: number; positionId: number }>();
-    const lineup = await cartolaClient.getTeamById(participant.cartolaTeamId, selectedRoundNumber);
-    const partialIndex = buildAthletePartialIndex(athletesScored);
-    const normalized =
-      marketState.partialRoundNumber === selectedRoundNumber
-        ? buildPartialLineupSnapshot({
-            roundNumber: selectedRoundNumber,
-            lineup,
-            athleteCatalog,
-            market,
-            partialIndex
-          })
-        : buildOfficialLineupSnapshot({
-            roundNumber: selectedRoundNumber,
-            lineup,
-            athleteCatalog,
-            market
-          });
-
-    const effectiveKeys = new Set(
-      normalized.effectivePlayers.map((player) => `${player.source}:${player.athleteId}`)
-    );
-    const starters = this.sortPlayersByPosition(
-      normalized.starters.map((player) => this.mapLivePlayer(player, effectiveKeys))
-    );
-    const reserves = this.sortPlayersByPosition(
-      normalized.reserves.map((player) => this.mapLivePlayer(player, effectiveKeys))
-    );
-    const effectivePlayers = this.sortPlayersByPosition(
-      [...starters, ...reserves]
-        .filter((player) => effectiveKeys.has(`${player.source}:${player.athleteId}`))
-        .map((player) => ({ ...player, counted: true }))
-    );
-
-    const detail: PublicTeamDetail = {
-      participantId: participant.id,
-      owner: participant.owner,
-      country: participant.country,
-      cartolaTeamName: participant.cartolaTeamName,
-      roundNumber: selectedRoundNumber,
-      roundLabel: formatRoundLabel(selectedRoundNumber),
-      state: marketState.partialRoundNumber === selectedRoundNumber ? "partial" : "official",
-      totalPoints: Number(normalized.totalPoints.toFixed(2)),
-      starters,
-      reserves,
-      effectivePlayers,
-      captainId: normalized.captainId,
-      reserveLuxuryId: normalized.reserveLuxuryId,
-      usesLiveData: true
-    };
-
-    return detail;
-  }
-
   private mapPersistedPlayer(player: {
     athlete_id: number | null;
     player_name: string;
+    photo_url?: string | null;
     club_name: string | null;
     position_name: string | null;
     points: number;
     entered: boolean;
+    status_label?: string | null;
     source: string;
     counted: boolean;
   }): PublicLineupPlayer {
     return {
       athleteId: player.athlete_id ?? 0,
       playerName: player.player_name,
+      photoUrl: normalizeCartolaPhotoUrl(player.photo_url ?? null),
       clubName: player.club_name ?? "Sem clube",
       positionName: player.position_name ?? "Sem posicao",
       points: Number(player.points),
       entered: player.entered,
+      matchStarted: !String(player.status_label ?? "").includes("waiting"),
       source: player.source === "reserve" ? "reserve" : "starter",
       counted: player.counted
-    };
-  }
-
-  private mapLivePlayer(
-    player: {
-      athleteId: number;
-      playerName: string;
-      clubName: string | null;
-      positionName: string | null;
-      points: number;
-      entered: boolean;
-      source: "starter" | "reserve";
-    },
-    effectiveKeys: Set<string>
-  ): PublicLineupPlayer {
-    return {
-      athleteId: player.athleteId,
-      playerName: player.playerName,
-      clubName: player.clubName ?? "Sem clube",
-      positionName: player.positionName ?? "Sem posicao",
-      points: Number(player.points.toFixed(2)),
-      entered: player.entered,
-      source: player.source,
-      counted: effectiveKeys.has(`${player.source}:${player.athleteId}`)
     };
   }
 

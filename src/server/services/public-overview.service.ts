@@ -1,14 +1,11 @@
 import { groups, getCompetitionOverview, getGroupMatches, getGroupStandings } from "@/domain/participants/static-league-data";
-import { LivePublicDataService } from "@/server/services/live-public-data.service";
-import { SyncService } from "@/server/services/sync.service";
+import { PublicReadinessService } from "@/server/services/public-readiness.service";
 
 export class PublicOverviewService {
-  private readonly syncService = new SyncService();
-  private readonly livePublicDataService = new LivePublicDataService();
+  private readonly publicReadinessService = new PublicReadinessService();
 
   async getOverview(roundId?: string | null, groupId?: string | null) {
-    const liveSnapshot = await this.livePublicDataService.getSnapshot();
-    const autoSyncAllowed = await this.syncService.shouldRunAccessDrivenSync();
+    const liveSnapshot = await this.publicReadinessService.ensurePublicDataReady();
     const overview = getCompetitionOverview();
     const activeGroup = this.resolveActiveGroup(
       groupId,
@@ -48,7 +45,6 @@ export class PublicOverviewService {
       mostPickedPlayers:
         liveSnapshot.mostPickedByRound[String(selectedRoundNumber)] ??
         [],
-      autoSyncAllowed,
       usesLiveData: liveSnapshot.usesLiveData
     };
   }

@@ -46,10 +46,12 @@ export type PublicMostPickedPlayer = {
 export type PublicLineupPlayer = {
   athleteId: number;
   playerName: string;
+  photoUrl: string | null;
   clubName: string;
   positionName: string;
   points: number | null;
   entered: boolean;
+  matchStarted: boolean;
   source: "starter" | "reserve";
   counted: boolean;
 };

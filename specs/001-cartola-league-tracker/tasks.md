@@ -13,6 +13,15 @@ description: "Task list for Cartola League Tracker implementation"
 
 **Organization**: Tasks are grouped by user story to enable independent implementation and testing of each story.
 
+## Current Status Snapshot *(2026-06-20)*
+
+The repository already contains the first end-to-end implementation for the
+public area, admin area, Supabase persistence, Cartola client, and snapshot
+services described in the original phases below. The remaining work for the
+group stage is now a refinement pass focused on operational sync behavior,
+market-state transitions, closed-market partial calculation, and official round
+freezing.
+
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: Can run in parallel (different files, no dependencies)
@@ -123,7 +132,9 @@ description: "Task list for Cartola League Tracker implementation"
 
 - [ ] T038 [P] [US3] Implement persisted lineup repositories in src/server/repositories/lineup.repository.ts and src/server/repositories/most-picked.repository.ts
 - [ ] T039 [P] [US3] Implement lineup detail components in src/components/public/TeamHeader.tsx, src/components/public/LineupList.tsx, and src/components/public/LineupPlayerRow.tsx
-- [ ] T040 [US3] Implement participant detail page in app/(public)/times/[teamId]/page.tsx
+- [ ] T040 [US3] Implement participant detail page in
+  app/(public)/times/[teamId]/page.tsx with mobile-first field and list modes,
+  fixed position ordering, and support for the documented formation variants
 - [ ] T041 [US3] Wire lineup sync persistence and team detail read-model generation in src/server/services/team-detail.service.ts and src/server/services/sync.service.ts
 
 **Checkpoint**: All user stories should now be independently functional
@@ -138,6 +149,55 @@ description: "Task list for Cartola League Tracker implementation"
 - [ ] T043 Harden secret handling, auth redirects, and cache boundaries in src/server/auth/, src/lib/cartola/, and app/api/
 - [ ] T044 [P] Validate quickstart scenarios and update specs/001-cartola-league-tracker/quickstart.md if implementation details differ
 - [ ] T045 Run full lint, unit, integration, and E2E validation and fix any remaining issues across package.json scripts and tests/
+
+---
+
+## Phase 7: Group-Stage Sync Refinement
+
+**Purpose**: Align the implemented tracker with the confirmed operational rules
+for `mercado/status`, round transitions, partial score calculation, and
+most-picked updates.
+
+### Tests for Refinement
+
+- [ ] T046 [P] Add sync transition tests for `status_mercado = 1`, `2`, and `4`
+  in tests/unit/sync/sync-service.test.ts
+- [ ] T047 [P] Add unit coverage for closed-market partial calculation,
+  absent-player detection after club matches, positive-only reserve
+  substitution, reserve-luxury substitution against the lowest scored starter
+  of the same position, and `1.5x` captain multiplier in tests/unit/sync/
+
+### Implementation for Refinement
+
+- [ ] T048 Implement a shared market-state resolver based on
+  `GET /mercado/status` in src/domain/sync/ or src/lib/cartola/
+- [ ] T049 Refactor sync orchestration in
+  src/server/services/sync.service.ts so only the current operational round is
+  recalculated repeatedly and previous official rounds are frozen
+- [ ] T050 Implement closed-market partial score calculation from
+  `/time/id/{timeId}` plus `/atletas/pontuados`, including club-match-aware
+  absence detection, positive-only reserve replacement by position,
+  positive-only reserve-luxury replacement against the lowest scored starter of
+  the same position, and `1.5x` captain scoring in
+  src/domain/sync/ and src/server/services/sync.service.ts
+- [ ] T051 Update public snapshot generation and team detail state handling in
+  src/server/services/live-public-data.service.ts,
+  src/server/services/persisted-public-snapshot.service.ts, and
+  src/server/services/team-detail.service.ts to use the same operational rules
+- [ ] T051a Update the team-detail presentation layer so field and list modes
+  share the same data, preserve mobile-first behavior, and keep the ordered
+  sequence goalkeeper -> full-backs -> center-backs -> midfielders -> forwards
+  -> coach in the list mode
+- [ ] T052 Update the most-picked aggregation to recompute from the operational
+  round lineups when the round is actively processed in
+  src/server/services/sync.service.ts,
+  src/server/services/live-public-data.service.ts, and
+  src/domain/sync/build-most-picked.ts
+- [ ] T053 Add persistence or metadata adjustments needed to distinguish partial
+  current-round snapshots from frozen official snapshots in supabase/migrations/
+  and src/server/repositories/
+- [ ] T054 Update quickstart and admin/public operational documentation after
+  the refinement in specs/001-cartola-league-tracker/quickstart.md and README.md
 
 ---
 

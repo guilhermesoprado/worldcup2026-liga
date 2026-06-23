@@ -1,4 +1,5 @@
 import type {
+  CartolaFixturesPayload,
   CartolaAthletesMarketPayload,
   CartolaAthletesScoredPayload,
   CartolaLineupPayload
@@ -8,16 +9,19 @@ type AthleteCatalogEntry = {
   clubId: number;
   positionId: number;
   name: string;
+  photo: string | null;
 };
 
 export type NormalizedPlayer = {
   athleteId: number;
   playerName: string;
+  photoUrl: string | null;
   clubName: string | null;
   positionName: string | null;
   positionId: number;
   points: number;
   entered: boolean;
+  matchStarted: boolean;
   source: "starter" | "reserve";
 };
 
@@ -36,6 +40,14 @@ type AthletePartialEntry = {
   points: number;
 };
 
+function normalizeCartolaPhotoUrl(photoUrl: string | null | undefined) {
+  if (!photoUrl) {
+    return null;
+  }
+
+  return photoUrl.replace("FORMATO", "220x220");
+}
+
 export function buildAthletePartialIndex(
   payload: CartolaAthletesScoredPayload | null
 ) {
@@ -50,23 +62,80 @@ export function buildAthletePartialIndex(
   );
 }
 
+export function buildStartedClubIds(
+  fixtures: CartolaFixturesPayload | null
+) {
+  if (!fixtures) {
+    return new Set<number>();
+  }
+
+  const now = Date.now();
+
+  return new Set<number>(
+    fixtures.partidas.flatMap((fixture) => {
+      const kickoffRaw = fixture.timestamp ?? Date.parse(fixture.partida_data);
+      const kickoffMs =
+        typeof kickoffRaw === "number" && kickoffRaw < 1_000_000_000_000
+          ? kickoffRaw * 1000
+          : kickoffRaw;
+      const hasStarted = Number.isFinite(kickoffMs) && kickoffMs <= now;
+
+      if (!hasStarted) {
+        return [];
+      }
+
+      return [fixture.clube_casa_id, fixture.clube_visitante_id];
+    })
+  );
+}
+
 export function resolveEffectivePlayers(
   starters: NormalizedPlayer[],
-  reserves: NormalizedPlayer[]
+  reserves: NormalizedPlayer[],
+  reserveLuxuryId: number | null
 ) {
   const effectivePlayers = starters
     .filter((player) => player.entered)
     .map((player) => ({ ...player }));
   const unusedReserves = reserves.map((player) => ({ ...player }));
 
-  for (const starter of starters.filter((player) => !player.entered)) {
+  for (const starter of starters.filter((player) => !player.entered && player.matchStarted)) {
     const reserveIndex = unusedReserves.findIndex(
-      (reserve) => reserve.entered && reserve.positionId === starter.positionId
+      (reserve) =>
+        reserve.athleteId !== reserveLuxuryId &&
+        reserve.entered &&
+        reserve.points > 0 &&
+        reserve.positionId === starter.positionId
     );
 
     if (reserveIndex >= 0) {
       effectivePlayers.push(unusedReserves[reserveIndex]!);
       unusedReserves.splice(reserveIndex, 1);
+    }
+  }
+
+  if (reserveLuxuryId !== null) {
+    const luxuryReserve = unusedReserves.find((reserve) => reserve.athleteId === reserveLuxuryId);
+
+    if (luxuryReserve && luxuryReserve.entered && luxuryReserve.points > 0) {
+      const luxuryTargetIndex = effectivePlayers.reduce<number>((lowestIndex, player, index) => {
+        if (player.source !== "starter" || player.positionId !== luxuryReserve.positionId) {
+          return lowestIndex;
+        }
+
+        if (lowestIndex === -1 || player.points < effectivePlayers[lowestIndex]!.points) {
+          return index;
+        }
+
+        return lowestIndex;
+      }, -1);
+
+      if (
+        luxuryTargetIndex >= 0 &&
+        luxuryReserve.points > effectivePlayers[luxuryTargetIndex]!.points
+      ) {
+        effectivePlayers.splice(luxuryTargetIndex, 1, luxuryReserve);
+      }
     }
   }
 
@@ -90,7 +159,11 @@ export function buildOfficialLineupSnapshot({
   const reserves = lineup.reservas.map((player) =>
     mapOfficialPlayer(player, athleteCatalog, market, "reserve")
   );
-  const effectivePlayers = resolveEffectivePlayers(starters, reserves);
+  const effectivePlayers = resolveEffectivePlayers(
+    starters,
+    reserves,
+    lineup.reserva_luxo_id ?? null
+  );
 
   return {
     roundNumber,
@@ -108,21 +181,27 @@ export function buildPartialLineupSnapshot({
   lineup,
   athleteCatalog,
   market,
-  partialIndex
+  partialIndex,
+  startedClubIds
 }: {
   roundNumber: number;
   lineup: CartolaLineupPayload;
   athleteCatalog: Map<number, AthleteCatalogEntry>;
   market: CartolaAthletesMarketPayload | null;
   partialIndex: Map<number, AthletePartialEntry>;
+  startedClubIds: Set<number>;
 }): NormalizedLineup {
   const starters = lineup.atletas.map((player) =>
-    mapPartialPlayer(player, athleteCatalog, market, partialIndex, "starter")
+    mapPartialPlayer(player, athleteCatalog, market, partialIndex, startedClubIds, "starter")
   );
   const reserves = lineup.reservas.map((player) =>
-    mapPartialPlayer(player, athleteCatalog, market, partialIndex, "reserve")
+    mapPartialPlayer(player, athleteCatalog, market, partialIndex, startedClubIds, "reserve")
   );
-  const effectivePlayers = resolveEffectivePlayers(starters, reserves);
+  const effectivePlayers = resolveEffectivePlayers(
+    starters,
+    reserves,
+    lineup.reserva_luxo_id ?? null
+  );
   const captainId = lineup.capitao_id ?? null;
 
   const totalPoints = effectivePlayers.reduce((total, player) => {
@@ -158,12 +237,14 @@ function mapOfficialPlayer(
 
   return {
     athleteId: player.atleta_id,
-    playerName: catalogEntry?.name ?? player.apelido,
+    playerName: player.apelido ?? catalogEntry?.name ?? "",
+    photoUrl: normalizeCartolaPhotoUrl(catalogEntry?.photo ?? null),
     clubName: resolveClubName(catalogEntry?.clubId ?? player.clube_id, market),
     positionName: resolvePositionName(catalogEntry?.positionId ?? player.posicao_id, market),
     positionId: player.posicao_id,
     points: typeof player.pontos_num === "number" ? player.pontos_num : 0,
     entered: player.entrou_em_campo !== false,
+    matchStarted: true,
     source
   };
 }
@@ -179,19 +260,23 @@ function mapPartialPlayer(
   athleteCatalog: Map<number, AthleteCatalogEntry>,
   market: CartolaAthletesMarketPayload | null,
   partialIndex: Map<number, AthletePartialEntry>,
+  startedClubIds: Set<number>,
   source: "starter" | "reserve"
 ): NormalizedPlayer {
   const catalogEntry = athleteCatalog.get(player.atleta_id);
   const partial = partialIndex.get(player.atleta_id);
+  const clubId = catalogEntry?.clubId ?? player.clube_id;
 
   return {
     athleteId: player.atleta_id,
-    playerName: catalogEntry?.name ?? player.apelido,
-    clubName: resolveClubName(catalogEntry?.clubId ?? player.clube_id, market),
+    playerName: player.apelido ?? catalogEntry?.name ?? "",
+    photoUrl: normalizeCartolaPhotoUrl(catalogEntry?.photo ?? null),
+    clubName: resolveClubName(clubId, market),
     positionName: resolvePositionName(catalogEntry?.positionId ?? player.posicao_id, market),
     positionId: player.posicao_id,
     points: partial?.points ?? 0,
-    entered: partial?.entered ?? player.entrou_em_campo === true,
+    entered: partial !== undefined,
+    matchStarted: startedClubIds.has(clubId),
     source
   };
 }

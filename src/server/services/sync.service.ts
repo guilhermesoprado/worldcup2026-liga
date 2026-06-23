@@ -1,6 +1,7 @@
 import { buildMostPicked } from "@/domain/sync/build-most-picked";
 import {
   buildAthletePartialIndex,
+  buildStartedClubIds,
   buildOfficialLineupSnapshot,
   buildPartialLineupSnapshot,
   type NormalizedLineup
@@ -315,6 +316,7 @@ export class SyncService {
       }
 
       const partialIndex = buildAthletePartialIndex(athletesScored);
+      const startedClubIds = buildStartedClubIds(fixtures);
       const processedRounds = new Map<number, ProcessedRound>();
 
       for (const roundNumber of [...roundsToProcess].sort((left, right) => left - right)) {
@@ -326,7 +328,8 @@ export class SyncService {
           participants,
           athleteCatalog,
           market: athletesMarket,
-          partialIndex
+          partialIndex,
+          startedClubIds
         });
         const matches = this.buildMatchesForRound({
           roundNumber,
@@ -419,12 +422,9 @@ export class SyncService {
             roundId: round.id,
             captainId: lineup.captainId,
             reserveLuxuryId: lineup.reserveLuxuryId,
-            captainName:
-              lineup.captainId !== null
-                ? athleteCatalog.get(lineup.captainId)?.name ?? null
-                : null,
-            coachName: null,
-            formationLabel: null,
+            captainName: this.resolveCaptainName(lineup),
+            coachName: this.resolveCoachName(lineup),
+            formationLabel: this.resolveFormationLabel(lineup),
             totalPoints: lineup.totalPoints,
             state: processedRound.state,
             rawPayloadRef: lineup.rawPayloadRef,
@@ -432,11 +432,16 @@ export class SyncService {
               ...lineup.starters.map((player) => ({
                 athleteId: player.athleteId,
                 playerName: player.playerName,
+                photoUrl: player.photoUrl,
                 clubName: player.clubName,
                 positionName: player.positionName,
                 captainMultiplier: lineup.captainId === player.athleteId ? 1 : 1,
                 points: player.points,
-                statusLabel: player.entered ? "entered" : "bench",
+                statusLabel: player.entered
+                  ? "starter_counting"
+                  : player.matchStarted
+                    ? "starter_absent"
+                    : "starter_waiting",
                 source: "starter" as const,
                 entered: player.entered,
                 counted: lineup.effectivePlayers.some(
@@ -448,11 +453,24 @@ export class SyncService {
               ...lineup.reserves.map((player) => ({
                 athleteId: player.athleteId,
                 playerName: player.playerName,
+                photoUrl: player.photoUrl,
                 clubName: player.clubName,
                 positionName: player.positionName,
                 captainMultiplier: 1,
                 points: player.points,
-                statusLabel: player.entered ? "reserve_entered" : "reserve_bench",
+                statusLabel: lineup.effectivePlayers.some(
+                  (effectivePlayer) =>
+                    effectivePlayer.athleteId === player.athleteId &&
+                    effectivePlayer.source === "reserve"
+                )
+                  ? "reserve_counting"
+                  : player.entered
+                    ? player.points > 0
+                      ? "reserve_unused_positive"
+                      : "reserve_negative"
+                    : player.matchStarted
+                      ? "reserve_absent"
+                      : "reserve_waiting",
                 source: "reserve" as const,
                 entered: player.entered,
                 counted: lineup.effectivePlayers.some(
@@ -636,7 +654,8 @@ export class SyncService {
     participants,
     athleteCatalog,
     market,
-    partialIndex
+    partialIndex,
+    startedClubIds
   }: {
     roundNumber: number;
     state: RoundProcessingState;
@@ -644,6 +663,7 @@ export class SyncService {
     athleteCatalog: Map<number, ReturnType<typeof mapAthleteCatalog> extends Map<number, infer T> ? T : never>;
     market: CartolaAthletesMarketPayload | null;
     partialIndex: ReturnType<typeof buildAthletePartialIndex>;
+    startedClubIds: Set<number>;
   }) {
     const results = await Promise.allSettled(
       participants.map((participant) => cartolaClient.getTeamById(participant.cartolaTeamId, roundNumber))
@@ -661,6 +681,7 @@ export class SyncService {
         athleteCatalog,
         market,
         partialIndex,
+        startedClubIds,
         state
       });
 
@@ -685,6 +706,7 @@ export class SyncService {
     athleteCatalog,
     market,
     partialIndex,
+    startedClubIds,
     state
   }: {
     requestedRoundNumber: number;
@@ -692,6 +714,7 @@ export class SyncService {
     athleteCatalog: Map<number, ReturnType<typeof mapAthleteCatalog> extends Map<number, infer T> ? T : never>;
     market: CartolaAthletesMarketPayload | null;
     partialIndex: ReturnType<typeof buildAthletePartialIndex>;
+    startedClubIds: Set<number>;
     state: RoundProcessingState;
   }): NormalizedLineup | null {
     const allPlayers = [...lineup.atletas, ...lineup.reservas];
@@ -721,7 +744,8 @@ export class SyncService {
         lineup,
         athleteCatalog,
         market,
-        partialIndex
+        partialIndex,
+        startedClubIds
       });
     }
 
@@ -904,5 +928,36 @@ export class SyncService {
     }
 
     return rounds.sort((left, right) => left.external_round_id - right.external_round_id)[0] ?? null;
+  }
+
+  private resolveCaptainName(lineup: NormalizedLineup) {
+    if (lineup.captainId === null) {
+      return null;
+    }
+
+    return (
+      [...lineup.starters, ...lineup.reserves].find(
+        (player) => player.athleteId === lineup.captainId
+      )?.playerName ?? null
+    );
+  }
+
+  private resolveCoachName(lineup: NormalizedLineup) {
+    return lineup.starters.find((player) => player.positionId === 6)?.playerName ?? null;
+  }
+
+  private resolveFormationLabel(lineup: NormalizedLineup) {
+    const counts = lineup.starters.reduce(
+      (acc, player) => {
+        if (player.positionId === 2) acc.defense += 1;
+        if (player.positionId === 3) acc.defense += 1;
+        if (player.positionId === 4) acc.midfield += 1;
+        if (player.positionId === 5) acc.attack += 1;
+        return acc;
+      },
+      { defense: 0, midfield: 0, attack: 0 }
+    );
+
+    return `${counts.defense}-${counts.midfield}-${counts.attack}`;
   }
 }

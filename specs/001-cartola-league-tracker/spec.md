@@ -4,9 +4,19 @@
 
 **Created**: 2026-06-17
 
-**Status**: Draft
+**Status**: In Progress
 
 **Input**: User description: "Aplicação para acompanhar uma liga do Cartola da Copa do Mundo com 48 times fixos representando 48 seleções, fase de grupos e mata-mata, visual público sofisticado e área administrativa para sincronização e controle operacional."
+
+## Implementation Status Snapshot *(2026-06-20)*
+
+- The public site, admin area, Cartola client, Supabase persistence, and
+  snapshot-based read models are already implemented in the repository.
+- Rounds, matches, standings, lineups, and most-picked snapshots are already
+  persisted, and the product is operational for the group-stage tracker.
+- The main remaining gap is a sync refinement pass so the implemented behavior
+  matches the confirmed rules for `status_mercado`, round transitions, partial
+  calculation, and official round freezing.
 
 ## User Scenarios & Testing *(mandatory)*
 
@@ -100,6 +110,10 @@ esse dado como resultado oficial encerrado.
   da fase de grupos ou do mata-mata?
 - O que acontece quando a rodada é encerrada oficialmente e o resultado final
   diverge da parcial exibida anteriormente?
+- O que acontece quando `status_mercado` for diferente de `1` ou `2`, como em
+  janelas de manutenção?
+- O que acontece quando a rodada atual muda, mas ainda existem snapshots
+  parciais persistidos da rodada anterior?
 
 ## Requirements *(mandatory)*
 
@@ -151,11 +165,65 @@ esse dado como resultado oficial encerrado.
 - **FR-018**: O sistema MUST permitir que o visitante clique em um time,
   cartoleiro ou seleção e acesse o detalhe da escalação e da pontuação
   correspondente.
+- **FR-018a**: A visualização principal do detalhe do time MUST usar como base
+  apenas três blocos de conteúdo: `Minha Escalacao`, `Lista do time principal`,
+  e `Reservas`. O header global da aplicação não faz parte deste padrão de
+  componente e não deve ser usado como referência de layout para essa seção.
+- **FR-018b**: O detalhe do time MUST suportar as variações de formação
+  documentadas para a competição e o layout do campo MUST estar preparado para
+  reposicionar os jogadores corretamente quando a formação mudar.
+- **FR-018c**: Na visualização em lista, os jogadores do time principal MUST ser
+  exibidos nesta ordem de posições: goleiro, laterais quando existirem,
+  zagueiros, meio-campistas, atacantes, e por fim técnico.
+- **FR-018d**: O detalhe do time MUST adotar mobile first como diretriz de
+  layout, priorizando legibilidade, espaçamento e navegação em celulares antes
+  de expandir o mesmo conteúdo para telas maiores.
+- **FR-018e**: O detalhe do time MUST permitir alternância entre visualização em
+  campo e visualização em lista, preservando a mesma informação funcional nas
+  duas apresentações.
 - **FR-019**: O sistema MUST manter a área pública disponível sem login até o
   fim da edição da competição.
 - **FR-020**: O sistema MUST informar de forma compreensível quando dados
   parciais, oficiais ou detalhes de equipe estiverem temporariamente
   indisponíveis.
+- **FR-021**: O sistema MUST interpretar `GET /mercado/status` com a semantica
+  operacional confirmada para o projeto: `status_mercado = 1` significa mercado
+  aberto, `status_mercado = 2` significa mercado fechado, e
+  `status_mercado = 4` significa manutenção.
+- **FR-022**: O sistema MUST recalcular automaticamente apenas a rodada
+  operacional atual, sem reprocessar continuamente rodadas anteriores já
+  oficializadas.
+- **FR-023**: Enquanto `status_mercado = 2` e a rodada atual estiver em
+  disputa, o sistema MUST calcular a pontuação parcial a partir dos titulares
+  retornados no objeto do time da rodada, dos reservas retornados no mesmo
+  objeto, das pontuações de `GET /atletas/pontuados`, e do multiplicador de
+  `1.5x` para o capitão.
+- **FR-023a**: Para cálculo parcial durante `status_mercado = 2`, se um atleta
+  não estiver presente em `GET /atletas/pontuados` e a partida do clube dele na
+  rodada já tiver acontecido, o sistema MUST tratá-lo como atleta que não
+  entrou em campo na rodada em andamento.
+- **FR-023b**: Para cálculo parcial durante `status_mercado = 2`, um reserva
+  comum MUST substituir um titular apenas quando todos os critérios forem
+  verdadeiros: o titular substituído for tratado como ausente segundo
+  `FR-023a`; o reserva tiver a mesma posição do titular; e o reserva estiver
+  presente em `GET /atletas/pontuados` com pontuação estritamente positiva. Se
+  a pontuação do reserva for negativa ou zero, a substituição MUST NOT
+  acontecer.
+- **FR-023c**: Para cálculo parcial durante `status_mercado = 2`, o reserva de
+  luxo identificado por `reserva_luxo_id` MUST substituir o titular de menor
+  pontuação entre os titulares pontuados da rodada da mesma posição do reserva
+  de luxo apenas quando o próprio reserva de luxo estiver presente em
+  `GET /atletas/pontuados` com pontuação estritamente positiva. Se a pontuação
+  do reserva de luxo for negativa ou zero, a substituição MUST NOT acontecer.
+- **FR-024**: Quando a rodada atual avançar para a rodada seguinte com
+  `status_mercado = 1`, o sistema MUST oficializar a rodada anterior usando a
+  pontuação oficial retornada por `GET /time/id/{timeId}/{rodada}`.
+- **FR-025**: Quando `status_mercado` for diferente de `1` ou `2`, o sistema
+  MUST registrar o estado operacional, preservar o último snapshot confiável e
+  MUST NOT forçar recálculo de pontuações ou ranking.
+- **FR-026**: O ranking público de jogadores mais escalados por rodada MUST ser
+  atualizado a partir das escalações dos times da liga da rodada operacional,
+  contando quantas vezes cada atleta foi escalado.
 
 ### External Integrations and Sync Rules *(mandatory when data comes from third parties)*
 
@@ -170,6 +238,29 @@ esse dado como resultado oficial encerrado.
   exibe dados parciais para acompanhamento; após a oficialização da rodada pelo
   Cartola, o sistema passa a exibir o resultado oficial consolidado como estado
   oficial da competição.
+- **Market-State Rule**: A interpretação do mercado vem de
+  `GET /mercado/status` e deve obedecer a semântica confirmada para o projeto:
+  `1 = aberto`, `2 = fechado`, `4 = manutenção`.
+- **Current Round Boundary**: A sincronização deve operar somente sobre a
+  rodada atual. Quando `rodada_atual` mudar, a rodada anterior deixa de receber
+  atualizações parciais e passa a ser consolidada de forma oficial.
+- **Partial Score Rule**: Em rodada com `status_mercado = 2`, a pontuação
+  parcial deve ser calculada a partir do objeto do time da rodada combinado com
+  `GET /atletas/pontuados`. Se um atleta não estiver em `GET /atletas/pontuados`
+  e a partida do clube dele já tiver acontecido, ele deve ser tratado como
+  ausente na rodada. Reservas comuns só entram no lugar de titulares ausentes
+  da mesma posição quando estiverem em `GET /atletas/pontuados` com pontuação
+  estritamente positiva. O reserva de luxo só entra no lugar do menor titular
+  pontuado da mesma posição quando também estiver em `GET /atletas/pontuados`
+  com pontuação estritamente positiva. O capitão mantém multiplicador `1.5x`.
+- **Officialization Rule**: Quando `rodada_atual` avança e `status_mercado = 1`,
+  a rodada anterior deve ser tratada como oficial e consolidada diretamente a
+  partir do objeto oficial retornado por `GET /time/id/{timeId}/{rodada}` para
+  a rodada selecionada, sem recalcular a parcial por essas regras de mercado
+  fechado.
+- **Operational Guardrail**: Em estados diferentes de `1` ou `2`, o sistema não
+  deve forçar sincronização de pontuação, mantendo o último estado confiável
+  persistido.
 - **Refresh Model**: A sincronização é interna e configurável pelo
   administrador, com atualização automática enquanto houver acesso ao sistema e
   sincronização manual como fallback oficial.
@@ -192,11 +283,17 @@ esse dado como resultado oficial encerrado.
   classificação.
 - **Rodada**: Representa um ciclo de pontuação da liga, com status, janela de
   apuração, sincronizações realizadas e distinção entre estado parcial e final.
+- **Estado de Mercado**: Representa o estado operacional externo retornado por
+  `GET /mercado/status`, usado para definir se a rodada está aberta, fechada ou
+  em manutenção.
 - **Classificação**: Representa a posição consolidada de um participante dentro
   do grupo ou da fase eliminatória, incluindo pontos, vitórias, saldo e pontos
   pró.
 - **Escalacao da Equipe**: Representa os jogadores usados por um participante em
   determinada rodada, com pontuação parcial ou oficial correspondente.
+- **Visualizacao da Escalacao**: Representa a forma de apresentação do detalhe
+  da equipe, com modo em campo e modo em lista, ambos compatíveis com múltiplas
+  formações e ordenação fixa por posição.
 - **Jogador Mais Escalado**: Representa o agregado por rodada de um atleta
   escolhido por múltiplos participantes, incluindo total de escalações na liga.
 - **Configuracao de Sincronizacao**: Representa o estado operacional definido

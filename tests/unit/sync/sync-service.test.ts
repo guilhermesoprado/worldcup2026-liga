@@ -35,6 +35,7 @@ describe("SyncService normalizeLineupSnapshot", () => {
         athleteCatalog: Map<number, { clubId: number; positionId: number; name: string }>;
         market: null;
         partialIndex: ReturnType<typeof buildAthletePartialIndex>;
+        startedClubIds: Set<number>;
         state: "partial" | "official";
       }) => { totalPoints: number } | null;
     };
@@ -76,6 +77,7 @@ describe("SyncService normalizeLineupSnapshot", () => {
           }
         }
       }),
+      startedClubIds: new Set([1]),
       state: "partial"
     });
 
@@ -115,6 +117,7 @@ describe("SyncService normalizeLineupSnapshot", () => {
         athleteCatalog: Map<number, { clubId: number; positionId: number; name: string }>;
         market: null;
         partialIndex: ReturnType<typeof buildAthletePartialIndex>;
+        startedClubIds: Set<number>;
         state: "partial" | "official";
       }) => { totalPoints: number } | null;
     };
@@ -147,6 +150,7 @@ describe("SyncService normalizeLineupSnapshot", () => {
       athleteCatalog: new Map(),
       market: null,
       partialIndex: buildAthletePartialIndex({ atletas: {} }),
+      startedClubIds: new Set(),
       state: "official"
     });
 

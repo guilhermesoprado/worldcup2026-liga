@@ -119,8 +119,12 @@ execution only
   athlete appearances across the 48 fetched lineups for the current operational
   round, then enriching the result with player metadata from `/atletas/mercado`.
 - The app MUST combine `/time/id/{timeId}` and `/atletas/pontuados` to compute
-  partial round scores while `status_mercado = 2`, including valid reserve
-  substitutions and `1.5x` captain multiplier.
+  partial round scores while `status_mercado = 2`, treating missing athletes as
+  absent only after their club match has already happened, allowing common
+  reserve substitutions only for the same position with strictly positive
+  reserve points, allowing reserve-luxury substitution only for the same
+  position with strictly positive reserve-luxury points against the lowest
+  scored starter of that position, and applying the `1.5x` captain multiplier.
 - The app MUST use `GET /time/id/{timeId}/{rodada}` as the authoritative score
   source for the previous round once `rodada_atual` advances and
   `status_mercado = 1`.
@@ -138,8 +142,12 @@ public read models, and team detail:
 
 1. Only the current operational round is recalculated repeatedly.
 2. Partial scores are computed only while `status_mercado = 2`.
-3. Partial lineup totals are derived from starters, valid reserve replacements,
-   athlete scores from `/atletas/pontuados`, and `1.5x` captain score.
+3. Partial lineup totals are derived from starters, athlete scores from
+   `/atletas/pontuados`, absent-player detection after club matches have
+   happened, valid reserve replacements only with strictly positive reserve
+   points, reserve-luxury replacement against the lowest scored starter of the
+   same position only with strictly positive reserve-luxury points, and `1.5x`
+   captain score.
 4. When `rodada_atual` changes and `status_mercado = 1`, the previous round is
    consolidated as official and should stop receiving partial updates.
 5. When `status_mercado` is neither `1` nor `2`, the system records the
@@ -238,6 +246,25 @@ operational cost while preserving clear boundaries between UI, domain logic,
 server services, and integrations. The domain layer owns classification and
 knockout logic; route handlers and pages consume those services instead of
 duplicating rules.
+
+## Team Detail UI Addendum
+
+The next refinement of the team-detail experience must follow these interface
+rules:
+
+1. The component-level layout is centered on three blocks only: `Minha
+   Escalacao`, `Lista do time principal`, and `Reservas`.
+2. The team-detail component must not depend on the global application header as
+   its visual reference.
+3. The field layout must support all documented formation variants, keeping
+   player spacing readable and ready for real lineup redistribution.
+4. The ordered list view must always render the starting lineup by position in
+   this sequence: goalkeeper, full-backs when present, center-backs,
+   midfielders, forwards, and coach.
+5. The experience must be mobile first, with the narrow-screen layout treated as
+   the primary target and desktop as an enhancement.
+6. The interface must allow toggling between field view and list view without
+   changing the underlying lineup information.
 
 ## Complexity Tracking
 

@@ -129,3 +129,50 @@ and secure admin access.
   maintenance reasons in a single-edition product.
 - No automated tests: rejected because competition ranking errors would be too
   risky.
+
+## Decision 8: Drive round transitions from `mercado/status`
+
+**Decision**: Treat `GET /mercado/status` as the operational source for market
+state and current-round transitions, with the confirmed semantics
+`1 = aberto`, `2 = fechado`, and `4 = manutenção`.
+
+**Rationale**: The main gap found in the first implementation is not the
+availability of round data, but deciding exactly when a round should remain
+partial, stop receiving recalculation, and become official. Using
+`rodada_atual` plus the confirmed `status_mercado` semantics gives the project
+an explicit and auditable state model for those transitions.
+
+**Alternatives considered**:
+- Infer officialization from the presence of lineups returned by
+  `GET /time/id/{timeId}/{rodada}`: rejected because that can promote a round
+  too early and does not distinguish closed-market partials from open-market
+  official results.
+- Use only `bola_rolando` as the sync switch: rejected because it does not
+  fully express the project's operational rule for market open, market closed,
+  and maintenance windows.
+
+## Decision 9: Calculate closed-market partials manually
+
+**Decision**: While `status_mercado = 2`, compute round partials from team
+lineups plus `GET /atletas/pontuados`, treating athletes missing from
+`/atletas/pontuados` as absent only after their club match has already
+happened, allowing same-position reserve substitution only when the reserve has
+strictly positive points, allowing reserve-luxury substitution only when the
+reserve-luxury score is strictly positive and replaces the lowest scored
+starter of the same position, and applying a `1.5x` captain multiplier.
+
+**Rationale**: The project owner defined that closed-market active rounds
+should be tracked as partials until the round advances and opens again. That
+requires an explicit score engine instead of relying on the persisted total from
+the team endpoint as if it were already official, and it also requires the
+partial engine to distinguish between players who simply have not appeared in
+`/atletas/pontuados` yet and players whose club match has already happened and
+therefore must be treated as absent.
+
+**Alternatives considered**:
+- Trust the aggregated `pontos` field from the team endpoint during the closed
+  market window: rejected because the project distinguishes those scores from
+  officialized results.
+- Ignore reserve substitution and captain multiplier in the partial engine:
+  rejected because it would produce public totals that diverge from the expected
+  Cartola-style round logic used by the league.

@@ -11,7 +11,10 @@ export async function GET(
     const { teamId } = await context.params;
     const { searchParams } = new URL(request.url);
     return jsonResponse(
-      await teamDetailService.getTeamDetail(teamId, searchParams.get("roundId"))
+      await teamDetailService.getTeamDetail(
+        teamId,
+        searchParams.get("round") ?? searchParams.get("roundId")
+      )
     );
   } catch (error) {
     return errorResponse(error);

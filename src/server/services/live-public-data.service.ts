@@ -1,6 +1,7 @@
 import { buildMostPicked } from "@/domain/sync/build-most-picked";
 import {
   buildAthletePartialIndex,
+  buildStartedClubIds,
   buildOfficialLineupSnapshot,
   buildPartialLineupSnapshot,
   type NormalizedLineup
@@ -137,8 +138,9 @@ export class LivePublicDataService {
 
       const athleteCatalog = market
         ? mapAthleteCatalog(market)
-        : new Map<number, { name: string; clubId: number; positionId: number }>();
+        : new Map<number, { name: string; clubId: number; positionId: number; photo: string | null }>();
       const partialIndex = buildAthletePartialIndex(athletesScored);
+      const startedClubIds = buildStartedClubIds(fixtures);
       const roundsToBuild = GROUP_STAGE_ROUNDS.filter((roundNumber) => {
         if (marketState.partialRoundNumber !== null) {
           return roundNumber <= marketState.partialRoundNumber;
@@ -171,7 +173,8 @@ export class LivePublicDataService {
                     lineup: result.value,
                     athleteCatalog,
                     market,
-                    partialIndex
+                    partialIndex,
+                    startedClubIds
                   })
                 : buildOfficialLineupSnapshot({
                     roundNumber,

@@ -25,7 +25,7 @@ export default async function MostPickedPage({
           <div>
             <h1 className="card__title">Jogadores mais escalados</h1>
             <span className="muted">
-              Ranking por rodada, contando titulares e substituicoes efetivas
+              Ranking por rodada, contando os titulares escalados pelos times da liga
             </span>
           </div>
           <Link href="/" className="text-link">
@@ -43,7 +43,7 @@ export default async function MostPickedPage({
         ) : (
           <EmptyState
             title="Sem jogadores contabilizados"
-            description="Esta rodada ainda nao possui escalações efetivamente computadas pelo Cartola."
+            description="Esta rodada ainda nao possui titulares contabilizados pelo Cartola."
           />
         )}
       </section>

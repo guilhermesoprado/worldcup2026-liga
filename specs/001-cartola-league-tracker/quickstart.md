@@ -36,6 +36,14 @@ the official state currently stored for the competition.
 
 **Expected outcome**: Partial points, simulated standings, and lineup details
 are visible, and the UI does not label them as final official results.
+Additionally, starters absent from `/atletas/pontuados` after their club match
+has already happened are treated as non-participants for the round, common
+reserves only enter with strictly positive points, and reserve luxury only
+enters with strictly positive points against the lowest scored starter of the
+same position.
+The team-detail screen must also work first on mobile, allow switching between
+field and list views, and keep the list ordered as goalkeeper, full-backs when
+present, center-backs, midfielders, forwards, and coach.
 
 ### 3. Admin authentication and sync controls
 
@@ -64,7 +72,8 @@ admin sees an updated last-sync timestamp and result summary.
 3. Revisit public overview, group table, match list, and one team detail page.
 
 **Expected outcome**: Partial state is replaced by official state, standings are
-recomputed, and knockout qualification state updates consistently.
+recomputed from the official team-by-round payloads, and knockout qualification
+state updates consistently.
 
 ## Validation Commands
 

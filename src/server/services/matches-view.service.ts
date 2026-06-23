@@ -1,11 +1,11 @@
 import { publicMatches } from "@/domain/participants/static-league-data";
-import { LivePublicDataService } from "@/server/services/live-public-data.service";
+import { PublicReadinessService } from "@/server/services/public-readiness.service";
 
 export class MatchesViewService {
-  private readonly livePublicDataService = new LivePublicDataService();
+  private readonly publicReadinessService = new PublicReadinessService();
 
   async getMatches(phase?: string | null, roundId?: string | null) {
-    const liveSnapshot = await this.livePublicDataService.getSnapshot();
+    const liveSnapshot = await this.publicReadinessService.ensurePublicDataReady();
     const baseMatches = liveSnapshot.matches.length > 0 ? liveSnapshot.matches : publicMatches;
     const selectedRoundNumber = this.resolveRoundNumber(
       roundId,

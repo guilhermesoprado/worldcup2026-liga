@@ -1,4 +1,10 @@
-import { groups as staticGroups, participants as staticParticipants } from "@/domain/participants/static-league-data";
+import {
+  groups as staticGroups,
+  participants as staticParticipants,
+  publicMostPickedPlayers,
+  publicMatches,
+  publicStandingsByGroup
+} from "@/domain/participants/static-league-data";
 import { GroupRepository } from "@/server/repositories/group.repository";
 import { MatchRepository } from "@/server/repositories/match.repository";
 import { MostPickedRepository } from "@/server/repositories/most-picked.repository";
@@ -249,6 +255,16 @@ export class PersistedPublicSnapshotService {
     }
   }
 
+  async getSnapshotOrFallback(): Promise<PersistedSnapshot> {
+    const persistedSnapshot = await this.getSnapshot();
+
+    if (persistedSnapshot) {
+      return persistedSnapshot;
+    }
+
+    return this.buildFallbackSnapshot();
+  }
+
   private resolveCurrentRound(rounds: Array<{ external_round_id: number; status: string }>) {
     const liveRound = rounds.find((round) => round.status === "live");
 
@@ -256,19 +272,15 @@ export class PersistedPublicSnapshotService {
       return liveRound;
     }
 
-    const highestOfficialRound = rounds
+    const highestOfficialRound = [...rounds]
       .filter((round) => round.status === "official")
-      .reduce((maxRound, round) => Math.max(maxRound, round.external_round_id), 0);
+      .sort((left, right) => right.external_round_id - left.external_round_id)[0];
 
-    const nextScheduledRound = [...rounds]
-      .filter((round) => round.status === "scheduled")
-      .sort((left, right) => left.external_round_id - right.external_round_id)
-      .find((round) => round.external_round_id > highestOfficialRound);
+    if (highestOfficialRound) {
+      return highestOfficialRound;
+    }
 
-    return (
-      nextScheduledRound ??
-      [...rounds].sort((left, right) => right.external_round_id - left.external_round_id)[0]!
-    );
+    return [...rounds].sort((left, right) => left.external_round_id - right.external_round_id)[0]!;
   }
 
   private buildStateLabel(
@@ -279,8 +291,8 @@ export class PersistedPublicSnapshotService {
       return `Parcial da ${currentRound.external_round_id}a rodada`;
     }
 
-    if (standingsRound.external_round_id < currentRound.external_round_id) {
-      return `Oficial apos ${standingsRound.external_round_id}a rodada`;
+    if (standingsRound.external_round_id === 0) {
+      return "Aguardando dados oficiais";
     }
 
     return `Oficial da ${standingsRound.external_round_id}a rodada`;
@@ -295,5 +307,32 @@ export class PersistedPublicSnapshotService {
     };
 
     return (priority[left] ?? -1) - (priority[right] ?? -1);
+  }
+
+  private buildFallbackSnapshot(): PersistedSnapshot {
+    return {
+      phase: "groups",
+      phaseLabel: "Fase de grupos",
+      completedMatches: 24,
+      totalMatches: GROUP_STAGE_TOTAL_MATCHES,
+      currentRoundNumber: 1,
+      currentRoundLabel: "1a rodada",
+      standingsRoundNumber: 1,
+      standingsRoundLabel: "1a rodada",
+      stateLabel: "Aguardando sincronizacao",
+      groups: staticGroups.map((group) => ({
+        code: group.code,
+        displayName: group.displayName
+      })),
+      availableRounds: [1, 2, 3],
+      standingsByGroup: publicStandingsByGroup,
+      matches: publicMatches,
+      mostPickedByRound: {
+        "1": publicMostPickedPlayers,
+        "2": [],
+        "3": []
+      },
+      usesLiveData: false
+    };
   }
 }

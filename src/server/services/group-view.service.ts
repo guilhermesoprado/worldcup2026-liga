@@ -1,11 +1,11 @@
 import { groups, getGroupMatches, getGroupStandings } from "@/domain/participants/static-league-data";
-import { LivePublicDataService } from "@/server/services/live-public-data.service";
+import { PublicReadinessService } from "@/server/services/public-readiness.service";
 
 export class GroupViewService {
-  private readonly livePublicDataService = new LivePublicDataService();
+  private readonly publicReadinessService = new PublicReadinessService();
 
   async getGroup(groupId: string, roundId?: string | null) {
-    const liveSnapshot = await this.livePublicDataService.getSnapshot();
+    const liveSnapshot = await this.publicReadinessService.ensurePublicDataReady();
     const normalizedGroupCode = groupId.toUpperCase();
     const group = groups.find((item) => item.code === normalizedGroupCode);
     const selectedRoundNumber = this.resolveRoundNumber(

@@ -16,7 +16,7 @@ const cartolaEnvSchema = z.object({
   CARTOLA_X_GLB_TAG: z.string().min(1),
   CARTOLA_X_GLB_APP: z.string().min(1),
   CARTOLA_X_GLB_AUTH: z.string().min(1),
-  CARTOLA_LEAGUE_SLUG: z.string().min(1)
+  CARTOLA_LEAGUE_SLUG: z.string().trim().optional().default("")
 });
 
 const envSchema = supabaseEnvSchema.merge(adminEnvSchema).merge(cartolaEnvSchema);
