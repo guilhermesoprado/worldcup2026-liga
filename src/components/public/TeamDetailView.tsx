@@ -432,7 +432,7 @@ export function TeamDetailView({ detail }: Props) {
               {player.clubName} - {buildStatusText(player, detail, replacements)}
             </span>
           </div>
-          <div
+          <div 
             className={[
               "team-detail-row__pts",
               isWaitingForMatch(player) ? "team-detail-row__pts--pending" : "",
