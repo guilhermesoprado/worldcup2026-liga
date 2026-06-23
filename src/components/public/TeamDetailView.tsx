@@ -468,7 +468,7 @@ export function TeamDetailView({ detail }: Props) {
           className={slotClassName ? `team-detail-player-slot ${slotClassName}` : "team-detail-player-slot"}
           style={{ left: `${slot.x}%`, top: `${slot.y}%` }}
         >
-          <TacticalPlayer
+          <TacticalPlayer 
             player={shown}
             inactive={!reserve && !starter.counted && starter.matchStarted}
             waiting={!reserve && isWaitingForMatch(starter)}
