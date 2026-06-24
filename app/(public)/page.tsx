@@ -60,6 +60,9 @@ export default async function PublicHomePage({
             <div>
               <h2 className="card__title">Classificação · Grupo {overview.activeGroupCode}</h2>
             </div>
+            <Link href="/classificacao-geral" className="text-link">
+              ver classificação geral
+            </Link>
           </div>
           {overview.activeGroupStandings.length > 0 ? (
             <StandingsTable

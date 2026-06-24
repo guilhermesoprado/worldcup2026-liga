@@ -21,10 +21,11 @@ export default async function TeamDetailPage({
   searchParams
 }: {
   params: Promise<{ teamId: string }>;
-  searchParams?: Promise<{ round?: string }>;
+  searchParams?: Promise<{ round?: string; view?: string }>;
 }) {
   const { teamId } = await params;
   const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const view = resolvedSearchParams?.view === "list" ? "list" : "field";
   const detail = await teamDetailService.getTeamDetail(teamId, resolvedSearchParams?.round);
 
   if (!isPublicTeamDetail(detail)) {
@@ -32,8 +33,8 @@ export default async function TeamDetailPage({
       <main className="shell public-home">
         <section className="card public-page">
           <EmptyState
-            title="Time nao encontrado"
-            description="Nao foi possivel localizar o participante solicitado."
+            title="Time não encontrado"
+            description="Não foi possível localizar o participante solicitado."
           />
         </section>
       </main>
@@ -42,7 +43,7 @@ export default async function TeamDetailPage({
 
   return (
     <main className="shell public-home">
-      <TeamDetailView detail={detail} />
+      <TeamDetailView detail={detail} view={view} />
     </main>
   );
 }

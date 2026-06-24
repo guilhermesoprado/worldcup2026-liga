@@ -7,6 +7,7 @@ import type { PublicLineupPlayer, PublicTeamDetail } from "@/types/public";
 
 type Props = {
   detail: PublicTeamDetail;
+  view: "field" | "list";
 };
 
 type PositionKey = "GOL" | "LAT" | "ZAG" | "MEI" | "ATA" | "TEC";
@@ -64,6 +65,20 @@ function formatFormation(starters: PublicLineupPlayer[]) {
 }
 
 function sortMainPlayers(players: PublicLineupPlayer[]) {
+  return [...players].sort((left, right) => {
+    const leftKey = normalizePosition(left.positionName);
+    const rightKey = normalizePosition(right.positionName);
+    const orderDiff = POSITION_ORDER[leftKey] - POSITION_ORDER[rightKey];
+
+    if (orderDiff !== 0) {
+      return orderDiff;
+    }
+
+    return getPlayerLabel(left.playerName).localeCompare(getPlayerLabel(right.playerName));
+  });
+}
+
+function sortReservePlayers(players: PublicLineupPlayer[]) {
   return [...players].sort((left, right) => {
     const leftKey = normalizePosition(left.positionName);
     const rightKey = normalizePosition(right.positionName);
@@ -254,7 +269,7 @@ function buildStatusText(
     }
 
     if (player.counted) {
-      return "Contando na pontuação";
+      return "Em campo";
     }
 
     if (!player.matchStarted) {
@@ -277,7 +292,7 @@ function buildStatusText(
 
   if (player.entered) {
     return player.points !== null && player.points > 0
-      ? "Pontuou, mas não foi acionado"
+      ? "Não entrou"
       : "Pontuou negativo e não pode entrar";
   }
 
@@ -347,11 +362,39 @@ function PlayerAvatar({
   );
 }
 
+function LuxuryMarkerIcon() {
+  return (
+    <svg viewBox="0 0 20 20" aria-hidden="true" className="team-detail-marker__icon">
+      <path
+        d="M5.2 5.1h4.2v1.8H8.1l2.9 2.9-1.3 1.3-2.9-2.9v1.3H5.2V5.1Zm9.6 9.8h-4.2v-1.8h1.3L9 10.2l1.3-1.3 2.9 2.9v-1.3h1.6v4.4Z"
+        fill="currentColor"
+      />
+    </svg>
+  );
+}
+
+function ArrowUpMarkerIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true" className="team-detail-marker__icon">
+      <path d="M8 3.1 13 8H9.7v4.9H6.3V8H3l5-4.9Z" fill="currentColor" />
+    </svg>
+  );
+}
+
+function ArrowDownMarkerIcon() {
+  return (
+    <svg viewBox="0 0 16 16" aria-hidden="true" className="team-detail-marker__icon">
+      <path d="M8 12.9 3 8h3.3V3.1h3.4V8H13l-5 4.9Z" fill="currentColor" />
+    </svg>
+  );
+}
+
 function TacticalPlayer({
   player,
   inactive,
   waiting,
   reserveIn,
+  reserveOut,
   isCaptain,
   isLuxury
 }: {
@@ -359,6 +402,7 @@ function TacticalPlayer({
   inactive: boolean;
   waiting: boolean;
   reserveIn: boolean;
+  reserveOut: boolean;
   isCaptain: boolean;
   isLuxury: boolean;
 }) {
@@ -368,16 +412,37 @@ function TacticalPlayer({
         "team-detail-tactical-player",
         inactive ? "team-detail-tactical-player--inactive" : "",
         waiting ? "team-detail-tactical-player--waiting" : "",
-        reserveIn ? "team-detail-tactical-player--reserve-in" : ""
+        reserveIn ? "team-detail-tactical-player--reserve-in" : "",
+        reserveOut ? "team-detail-tactical-player--reserve-out" : ""
       ]
         .filter(Boolean)
         .join(" ")}
     >
       <div className="team-detail-avatar-ring">
         <PlayerAvatar player={player} className="team-detail-avatar-face" />
-        {isCaptain ? <span className="team-detail-chip team-detail-chip--captain">C</span> : null}
-        {isLuxury ? <span className="team-detail-chip team-detail-chip--luxury">RL</span> : null}
-        {reserveIn ? <span className="team-detail-chip team-detail-chip--in">IN</span> : null}
+        {isCaptain ? (
+          <span className="team-detail-marker team-detail-marker--captain" aria-label="Capitão">
+            C
+          </span>
+        ) : null}
+        {isLuxury ? (
+          <span
+            className="team-detail-marker team-detail-marker--luxury"
+            aria-label="Reserva de luxo"
+          >
+            <LuxuryMarkerIcon />
+          </span>
+        ) : null}
+        {reserveIn ? (
+          <span className="team-detail-marker team-detail-marker--up" aria-label="Entrou">
+            <ArrowUpMarkerIcon />
+          </span>
+        ) : null}
+        {reserveOut ? (
+          <span className="team-detail-marker team-detail-marker--down" aria-label="Saiu">
+            <ArrowDownMarkerIcon />
+          </span>
+        ) : null}
       </div>
       <div className="team-detail-name-plate">{getPlayerLabel(player.playerName)}</div>
       <div
@@ -395,18 +460,18 @@ function TacticalPlayer({
   );
 }
 
-export function TeamDetailView({ detail }: Props) {
-  const [mode, setMode] = useState<"field" | "list">("field");
-
+export function TeamDetailView({ detail, view }: Props) {
   const orderedStarters = useMemo(() => sortMainPlayers(detail.starters), [detail.starters]);
+  const orderedReserves = useMemo(() => sortReservePlayers(detail.reserves), [detail.reserves]);
   const formationLabel = useMemo(() => formatFormation(detail.starters), [detail.starters]);
   const formationLayout = useMemo(() => getFormationLayout(formationLabel), [formationLabel]);
   const replacements = useMemo(() => buildReplacementMap(detail), [detail]);
   const fieldGroups = useMemo(() => buildFieldGroups(detail.starters), [detail.starters]);
   const hasMainLineup = orderedStarters.length > 0;
   const teamHeading = detail.cartolaTeamName?.trim() || detail.country;
-  const teamMeta = [detail.country, detail.owner].filter(Boolean).join(" · ");
-  const heroEyebrow = "";
+  const teamMeta = [detail.country, detail.owner].filter(Boolean).join(" • ");
+  const fieldHref = `/times/${detail.participantId}?round=${detail.roundNumber}&view=field`;
+  const listHref = `/times/${detail.participantId}?round=${detail.roundNumber}&view=list`;
 
   const renderMainRows = (players: PublicLineupPlayer[]) =>
     players.map((player) => {
@@ -429,10 +494,10 @@ export function TeamDetailView({ detail }: Props) {
               {player.athleteId === detail.captainId ? " (C)" : ""}
             </div>
             <span className="team-detail-row__meta">
-              {player.clubName} - {buildStatusText(player, detail, replacements)}
+              {player.clubName} • {buildStatusText(player, detail, replacements)}
             </span>
           </div>
-          <div 
+          <div
             className={[
               "team-detail-row__pts",
               isWaitingForMatch(player) ? "team-detail-row__pts--pending" : "",
@@ -473,6 +538,7 @@ export function TeamDetailView({ detail }: Props) {
             inactive={!reserve && !starter.counted && starter.matchStarted}
             waiting={!reserve && isWaitingForMatch(starter)}
             reserveIn={Boolean(reserve)}
+            reserveOut={Boolean(reserve)}
             isCaptain={shown.athleteId === detail.captainId}
             isLuxury={shown.athleteId === detail.reserveLuxuryId}
           />
@@ -489,7 +555,7 @@ export function TeamDetailView({ detail }: Props) {
 
     return (
       <div className="team-detail-bench">
-        {detail.reserves.map((reserve) => (
+        {orderedReserves.map((reserve) => (
           <article
             key={`reserve-${reserve.athleteId}`}
             className={[
@@ -502,13 +568,15 @@ export function TeamDetailView({ detail }: Props) {
             <div className="team-detail-bench__avatar-wrap">
               <PlayerAvatar player={reserve} className="team-detail-bench__avatar" />
               {reserve.athleteId === detail.reserveLuxuryId ? (
-                <span className="team-detail-chip team-detail-chip--luxury">RL</span>
+                <span className="team-detail-chip team-detail-chip--luxury" aria-label="Reserva de luxo">
+                  <LuxuryMarkerIcon />
+                </span>
               ) : null}
             </div>
             <div>
               <div className="team-detail-bench__name">{getPlayerLabel(reserve.playerName)}</div>
               <span className="team-detail-bench__meta">
-                {normalizePosition(reserve.positionName)} - {reserve.clubName} -{" "}
+                {normalizePosition(reserve.positionName)} • {reserve.clubName} •{" "}
                 {buildStatusText(reserve, detail, replacements)}
               </span>
             </div>
@@ -537,40 +605,53 @@ export function TeamDetailView({ detail }: Props) {
     }
 
     return (
-      <div className="team-detail-pitch-bench">
-        {detail.reserves.map((reserve) => (
-          <article
-            key={`pitch-reserve-${reserve.athleteId}`}
-            className={[
-              "team-detail-pitch-bench__item",
-              reserve.counted ? "team-detail-pitch-bench__item--counting" : ""
-            ]
-              .filter(Boolean)
-              .join(" ")}
-          >
-            <div className="team-detail-pitch-bench__avatar-wrap">
-              <PlayerAvatar player={reserve} className="team-detail-pitch-bench__avatar" />
-              {reserve.athleteId === detail.reserveLuxuryId ? (
-                <span className="team-detail-chip team-detail-chip--luxury"><i className="fa fa-refresh"></i></span>
-              ) : null}
-            </div>
-            <div className="team-detail-pitch-bench__name">{getPlayerLabel(reserve.playerName)}</div>
-            <div
+      <section className="team-detail-pitch-bench-wrap" aria-label="Reservas desta rodada">
+        <div className="team-detail-pitch-bench__header">
+          <h3 className="team-detail-subtitle">Reservas</h3>
+        </div>
+        <div className="team-detail-pitch-bench">
+          {orderedReserves.map((reserve) => (
+            <article
+              key={`pitch-reserve-${reserve.athleteId}`}
               className={[
-                "team-detail-pitch-bench__score",
-                isWaitingForMatch(reserve) ? "team-detail-pitch-bench__score--pending" : "",
-                reserve.points !== null && reserve.points < 0
-                  ? "team-detail-pitch-bench__score--negative"
-                  : ""
+                "team-detail-pitch-bench__item",
+                reserve.counted ? "team-detail-pitch-bench__item--counting" : ""
               ]
                 .filter(Boolean)
                 .join(" ")}
             >
-              {formatDisplayPoints(reserve)}
-            </div>
-          </article>
-        ))}
-      </div>
+              <div className="team-detail-pitch-bench__avatar-wrap">
+                <PlayerAvatar player={reserve} className="team-detail-pitch-bench__avatar" />
+                {reserve.athleteId === detail.reserveLuxuryId ? (
+                  <span className="team-detail-chip team-detail-chip--luxury" aria-label="Reserva de luxo">
+                    <LuxuryMarkerIcon />
+                  </span>
+                ) : null}
+              </div>
+              <div className="team-detail-pitch-bench__name">{getPlayerLabel(reserve.playerName)}</div>
+              <div
+                className={[
+                  "team-detail-pitch-bench__score",
+                  isWaitingForMatch(reserve) ? "team-detail-pitch-bench__score--pending" : "",
+                  reserve.points !== null && reserve.points < 0
+                    ? "team-detail-pitch-bench__score--negative"
+                    : ""
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+              >
+                {formatDisplayPoints(reserve)}
+              </div>
+            </article>
+          ))}
+        </div>
+        <div className="team-detail-marker-legend" aria-label="Legenda dos marcadores">
+          <span><strong className="team-detail-marker-legend__token team-detail-marker-legend__token--captain">C</strong> Capitão</span>
+          <span><strong className="team-detail-marker-legend__token team-detail-marker-legend__token--luxury"><LuxuryMarkerIcon /></strong> Reserva de luxo</span>
+          <span><strong className="team-detail-marker-legend__token team-detail-marker-legend__token--up"><ArrowUpMarkerIcon /></strong> Entrou</span>
+          <span><strong className="team-detail-marker-legend__token team-detail-marker-legend__token--down"><ArrowDownMarkerIcon /></strong> Saiu</span>
+        </div>
+      </section>
     );
   };
 
@@ -579,7 +660,6 @@ export function TeamDetailView({ detail }: Props) {
       <article className="card public-home__panel team-detail-controls">
         <div className="public-detail-hero__top">
           <div>
-            <span className="hero__eyebrow">{heroEyebrow}</span>
             <div className="public-detail-hero__identity">
               <FlagBadge country={detail.country} className="flag-badge--hero" />
               <div className="team-detail-controls__top">
@@ -595,7 +675,7 @@ export function TeamDetailView({ detail }: Props) {
         <div className="public-detail-hero__stats public-detail-hero__stats--compact">
           <div className="public-kpi">
             <span className="public-kpi__label">Rodada</span>
-            <strong>{detail.roundLabel.replace("a rodada", "ª rodada")}</strong>
+            <strong>{detail.roundLabel.replace(/(\d+)a rodada/, "$1ª rodada")}</strong>
           </div>
           <div className="public-kpi">
             <span className="public-kpi__label">Pontuação total</span>
@@ -604,31 +684,30 @@ export function TeamDetailView({ detail }: Props) {
         </div>
         <div className="team-detail-controls__bar">
           <div className="team-detail-toggle" role="tablist" aria-label="Modo de visualização">
-            <button
-              type="button"
-              className={mode === "field" ? "is-active" : ""}
-              onClick={() => setMode("field")}
+            <Link
+              href={fieldHref}
+              className={view === "field" ? "is-active" : ""}
+              aria-current={view === "field" ? "page" : undefined}
             >
               Campo
-            </button>
-            <button
-              type="button"
-              className={mode === "list" ? "is-active" : ""}
-              onClick={() => setMode("list")}
+            </Link>
+            <Link
+              href={listHref}
+              className={view === "list" ? "is-active" : ""}
+              aria-current={view === "list" ? "page" : undefined}
             >
               Lista
-            </button>
+            </Link>
           </div>
         </div>
       </article>
 
-      <div className={`team-detail-grid${mode === "list" ? " team-detail-grid--list" : ""}`}>
-        {mode === "field" ? (
+      <div className={`team-detail-grid${view === "list" ? " team-detail-grid--list" : ""}`}>
+        {view === "field" ? (
           <article className="card public-home__panel team-detail-panel">
             <div className="team-detail-panel__head">
               <div>
-                <h2 className="card__title">{teamHeading}</h2>
-                <p className="muted">Formação {formationLabel}</p>
+                <h2 className="card__title">Escalação</h2>
               </div>
             </div>
 
@@ -668,6 +747,7 @@ export function TeamDetailView({ detail }: Props) {
           <div className="team-detail-panel__head">
             <div>
               <h2 className="card__title">Time Principal</h2>
+              {view === "list" ? <p className="muted">Formação {formationLabel}</p> : null}
             </div>
           </div>
           {hasMainLineup ? (
@@ -679,7 +759,7 @@ export function TeamDetailView({ detail }: Props) {
           )}
         </article>
 
-        {mode === "list" ? (
+        {view === "list" ? (
           <article className="card public-home__panel team-detail-panel">
             <div className="team-detail-panel__head">
               <div>
