@@ -169,12 +169,7 @@ export default async function OverallClassificationPage({
         <div className="hero__content">
           <div className="overall-classification__hero-top">
             <div>
-              <span className="hero__eyebrow">Classificação geral projetada</span>
               <h1>Classificação geral</h1>
-              <p className="overall-classification__hero-copy">
-                A leitura considera os 1ºs e 2ºs de cada grupo como classificados automáticos.
-                Depois disso, entram os 8 melhores 3ºs por pontos, vitórias, saldo de pontos e pontos pró.
-              </p>
             </div>
             <Link href="/" className="text-link overall-classification__hero-back">
               voltar ao painel

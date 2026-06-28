@@ -17,8 +17,7 @@ export default async function SecondPhasePage() {
         title="Segunda Fase"
         completedMatches={secondPhaseMatches.filter((match) => match.state !== "scheduled").length}
         totalMatches={16}
-        showEyebrow={false}
-        showProgress={false}
+        previousPhaseLink={{ href: "/fase-de-grupos", label: "Voltar para a fase de grupos" }}
         nextPhaseDisabled
       />
 

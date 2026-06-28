@@ -70,7 +70,6 @@ export function PhaseHero({
   title,
   completedMatches,
   totalMatches,
-  showEyebrow = true,
   showProgress = true,
   previousPhaseLink,
   nextPhaseLink,
@@ -85,8 +84,6 @@ export function PhaseHero({
       <div className="hero__glow" aria-hidden="true" />
       <div className="hero__content">
         <div className="hero__headline">
-          {showEyebrow ? <span className="hero__eyebrow">Fase atual</span> : null}
-
           <div className="hero__title-row">
             {previousPhaseLink ? (
               <HeroArrow
