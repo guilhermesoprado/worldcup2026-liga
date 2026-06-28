@@ -1,6 +1,6 @@
 import { EmptyState } from "@/components/public/EmptyState";
+import { MatchCards } from "@/components/public/MatchCards";
 import { PhaseHero } from "@/components/public/PhaseHero";
-import { SecondPhaseBracket } from "@/components/public/SecondPhaseBracket";
 import { PublicReadinessService } from "@/server/services/public-readiness.service";
 
 export const dynamic = "force-dynamic";
@@ -23,7 +23,7 @@ export default async function SecondPhasePage() {
 
       <section className="card second-phase-page">
         {secondPhaseMatches.length > 0 ? (
-          <SecondPhaseBracket matches={secondPhaseMatches} />
+          <MatchCards matches={secondPhaseMatches} showBadge={false} />
         ) : (
           <EmptyState
             title="Segunda fase ainda nao gerada"

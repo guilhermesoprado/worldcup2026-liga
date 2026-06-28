@@ -4,6 +4,7 @@ import type { PublicMatch } from "@/types/public";
 
 type MatchCardsProps = {
   matches: PublicMatch[];
+  showBadge?: boolean;
 };
 
 function hasScore(match: PublicMatch) {
@@ -24,7 +25,7 @@ function resolveWinner(match: PublicMatch) {
   return match.homePoints! > match.awayPoints! ? "home" : "away";
 }
 
-export function MatchCards({ matches }: MatchCardsProps) {
+export function MatchCards({ matches, showBadge = true }: MatchCardsProps) {
   return (
     <div className="match-list">
       {matches.map((match) => {
@@ -49,7 +50,9 @@ export function MatchCards({ matches }: MatchCardsProps) {
         return (
           <article key={match.id} className={`match-card match-card--${match.state}`}>
             <div className="match-card__top">
-              <span className="badge">{match.groupCode ? `Grupo ${match.groupCode}` : match.phase}</span>
+              {showBadge ? (
+                <span className="badge">{match.groupCode ? `Grupo ${match.groupCode}` : match.phase}</span>
+              ) : null}
               {match.state === "partial" ? <span className="match-card__live-dot" aria-label="Ao vivo" /> : null}
             </div>
 

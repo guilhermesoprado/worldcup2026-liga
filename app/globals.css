@@ -898,6 +898,12 @@ a {
   margin-top: 18px;
 }
 
+@media (min-width: 721px) {
+  .public-home .second-phase-page .match-card--scheduled .match-score {
+    grid-template-columns: auto auto auto;
+  }
+}
+
 .second-phase-bracket {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -1801,8 +1807,6 @@ a {
 
 .overall-team-row--third-table {
   grid-template-columns: 72px 1fr 70px 70px 90px 90px;
-  background: rgba(9, 20, 34, 0.56);
-  border-color: rgba(255, 255, 255, 0.06);
 }
 
 .overall-team-link {
@@ -1850,6 +1854,27 @@ a {
   font-size: 0.88rem;
   font-weight: 900;
   letter-spacing: -0.03em;
+}
+
+.overall-team-rank--direct,
+.overall-team-row--direct .overall-team-rank {
+  background: rgba(99, 240, 194, 0.16);
+  border-color: rgba(99, 240, 194, 0.28);
+  color: #7df0cb;
+}
+
+.overall-team-rank--third,
+.overall-team-row--third .overall-team-rank {
+  background: rgba(239, 180, 137, 0.16);
+  border-color: rgba(239, 180, 137, 0.28);
+  color: #f0c193;
+}
+
+.overall-team-rank--out,
+.overall-team-row--out .overall-team-rank {
+  background: rgba(219, 90, 90, 0.16);
+  border-color: rgba(219, 90, 90, 0.28);
+  color: #ef9a9a;
 }
 
 .overall-team-badge {
@@ -2313,6 +2338,13 @@ a {
   bottom: -8px;
   background: var(--public-accent);
   color: #041713;
+}
+
+.team-detail-chip--out {
+  right: -6px;
+  bottom: -8px;
+  background: #f4c44f;
+  color: #121620;
 }
 
 .team-detail-name-plate {
