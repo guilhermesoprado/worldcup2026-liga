@@ -19,7 +19,6 @@ export default async function SecondPhasePage() {
         totalMatches={16}
         showEyebrow={false}
         showProgress={false}
-        previousPhaseLink={{ href: "/", label: "Voltar para a fase de grupos" }}
         nextPhaseDisabled
       />
 
