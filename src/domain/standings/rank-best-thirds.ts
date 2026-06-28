@@ -1,6 +1,8 @@
 import type { GroupStanding } from "@/domain/standings/calculate-group-standings";
 
-export function rankBestThirds(thirdPlacedStandings: GroupStanding[]) {
+type BestThirdStanding = Pick<GroupStanding, "points" | "wins" | "pointsDifference" | "pointsFor">;
+
+export function rankBestThirds<T extends BestThirdStanding>(thirdPlacedStandings: T[]) {
   return [...thirdPlacedStandings].sort((a, b) => {
     return (
       b.points - a.points ||
@@ -10,4 +12,3 @@ export function rankBestThirds(thirdPlacedStandings: GroupStanding[]) {
     );
   });
 }
-

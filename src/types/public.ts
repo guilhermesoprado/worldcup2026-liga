@@ -18,6 +18,7 @@ export type PublicStanding = {
 export type PublicMatch = {
   id: string;
   phase: string;
+  phaseSlot?: string;
   groupCode: string | null;
   roundNumber: number;
   state: "partial" | "official" | "scheduled";

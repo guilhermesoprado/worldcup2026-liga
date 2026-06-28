@@ -1,13 +1,16 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { AdminSecondPhaseControls } from "@/components/admin/AdminSecondPhaseControls";
 import { AdminShell } from "@/components/admin/AdminShell";
 import { AdminSyncControls } from "@/components/admin/AdminSyncControls";
 import { requireAdminSession } from "@/server/auth/guards";
+import { SecondPhaseService } from "@/server/services/second-phase.service";
 import { SyncService } from "@/server/services/sync.service";
 
 export const dynamic = "force-dynamic";
 
 const syncService = new SyncService();
+const secondPhaseService = new SecondPhaseService();
 
 export default async function AdminDashboardPage() {
   try {
@@ -17,7 +20,10 @@ export default async function AdminDashboardPage() {
   }
 
   try {
-    const status = await syncService.getAdminStatus();
+    const [status, secondPhaseStatus] = await Promise.all([
+      syncService.getAdminStatus(),
+      secondPhaseService.getStatus()
+    ]);
 
     return (
       <AdminShell
@@ -69,6 +75,22 @@ export default async function AdminDashboardPage() {
               isEnabled={status.config.is_enabled}
               intervalMinutes={status.config.interval_minutes}
             />
+          </article>
+
+          <article className="card">
+            <div className="card__header">
+              <div>
+                <h2 className="card__title">Segunda fase</h2>
+                <span className="muted">
+                  Gere os confrontos dos 16 avos com a classificacao final dos grupos
+                </span>
+              </div>
+              <span className="badge">
+                {secondPhaseStatus.generatedMatches > 0 ? "gerada" : "pendente"}
+              </span>
+            </div>
+
+            <AdminSecondPhaseControls generatedMatches={secondPhaseStatus.generatedMatches} />
           </article>
 
           <article className="card">

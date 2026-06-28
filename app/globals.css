@@ -89,6 +89,160 @@ a {
   align-items: center;
 }
 
+.hero__headline {
+  display: grid;
+  gap: 6px;
+}
+
+.hero__phase-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.hero__title-row {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  align-items: center;
+  min-height: 44px;
+  width: 100%;
+  padding: 0 56px;
+  text-align: center;
+}
+
+.hero__phase-arrow {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border: 0;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.92);
+  font-size: 1.8rem;
+  line-height: 1;
+  flex-shrink: 0;
+  box-shadow: none;
+  transition:
+    transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    opacity 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.hero__phase-arrow-icon {
+  width: 26px;
+  height: 26px;
+  stroke: currentColor;
+  stroke-width: 1.9;
+  fill: none;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.hero__phase-arrow--left {
+  left: 8px;
+}
+
+.hero__phase-arrow--right {
+  right: 8px;
+}
+
+.hero__phase-arrow:hover {
+  transform: translateY(-1px);
+  color: #ffffff;
+}
+
+.hero__phase-arrow:active {
+  transform: scale(0.98);
+}
+
+.hero__phase-arrow--disabled {
+  opacity: 0.2;
+  cursor: not-allowed;
+}
+
+.hero__phase-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  padding: 0 16px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(245, 255, 247, 0.82);
+  font-size: 0.88rem;
+  font-weight: 700;
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease,
+    background 0.2s ease;
+}
+
+.hero__phase-link:hover {
+  transform: translateY(-1px);
+  border-color: rgba(255, 255, 255, 0.28);
+  color: #f5fff7;
+}
+
+.hero__phase-link--active {
+  background: rgba(255, 255, 255, 0.18);
+  border-color: rgba(255, 255, 255, 0.24);
+  color: #f5fff7;
+}
+
+.hero__description {
+  max-width: 760px;
+  margin: 14px 0 0;
+  color: rgba(245, 255, 247, 0.78);
+  line-height: 1.6;
+}
+
+.hero__phase-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+}
+
+.hero__phase-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 46px;
+  padding: 0 18px;
+  border-radius: 999px;
+  background: rgba(0, 225, 171, 0.16);
+  border: 1px solid rgba(0, 225, 171, 0.28);
+  color: #f5fff7;
+  font-size: 0.92rem;
+  font-weight: 800;
+  transition:
+    transform 0.2s ease,
+    border-color 0.2s ease,
+    background 0.2s ease;
+}
+
+.hero__phase-action:hover {
+  transform: translateY(-1px);
+  background: rgba(0, 225, 171, 0.22);
+  border-color: rgba(0, 225, 171, 0.4);
+}
+
+.hero__phase-action--secondary {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.14);
+}
+
+.hero__phase-action--secondary:hover {
+  background: rgba(255, 255, 255, 0.14);
+  border-color: rgba(255, 255, 255, 0.22);
+}
+
 .hero--admin {
   gap: 22px;
 }
@@ -598,7 +752,6 @@ a {
     linear-gradient(180deg, #07192b 0%, #051424 100%);
 }
 
-.public-home .hero,
 .public-home .card {
   background: var(--public-surface);
   color: var(--public-text);
@@ -609,18 +762,15 @@ a {
 }
 
 .public-home .hero {
-  min-height: 182px;
-  padding: 28px 34px;
-}
-
-.public-home .hero__glow {
-  position: absolute;
-  top: -58px;
-  right: -28px;
-  width: 188px;
-  height: 188px;
-  border-radius: 50%;
-  background: rgba(102, 240, 194, 0.18);
+  min-height: 0;
+  padding: 6px 0 14px;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  box-shadow: none;
 }
 
 .public-home .hero__content {
@@ -634,14 +784,19 @@ a {
   color: rgba(0, 225, 171, 0.9);
 }
 
+.public-home .hero__phase-arrow {
+  border-color: rgba(0, 225, 171, 0.16);
+  background: linear-gradient(180deg, rgba(6, 24, 33, 0.78), rgba(7, 19, 31, 0.58));
+  color: var(--public-accent);
+}
+
 .public-home .hero h1 {
   color: var(--public-title);
   font-size: clamp(3rem, 5vw, 4.6rem);
 }
 
 .public-home .hero__meta {
-  justify-content: space-between;
-  align-items: end;
+  justify-content: center;
 }
 
 .public-home .progress {
@@ -737,6 +892,95 @@ a {
 
 .public-home__panel--wide {
   margin-top: 18px;
+}
+
+.second-phase-page {
+  margin-top: 18px;
+}
+
+.second-phase-bracket {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.second-phase-match {
+  display: grid;
+  gap: 16px;
+  padding: 18px;
+  border-radius: 22px;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)),
+    rgba(13, 28, 45, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.second-phase-match__eyebrow {
+  display: inline-flex;
+  align-items: center;
+  justify-self: start;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(0, 225, 171, 0.12);
+  color: var(--public-accent);
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.second-phase-match__teams {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  gap: 14px;
+  align-items: center;
+}
+
+.second-phase-match__versus {
+  width: 44px;
+  height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--public-title);
+  font-size: 1rem;
+  font-weight: 800;
+}
+
+.second-phase-slot {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.second-phase-slot--right {
+  text-align: right;
+}
+
+.second-phase-slot span:not(.flag-badge) {
+  color: var(--public-muted);
+  font-size: 0.86rem;
+}
+
+.second-phase-slot__team {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.second-phase-slot__team--right {
+  justify-content: flex-end;
+}
+
+.second-phase-slot strong {
+  color: var(--public-title);
+  font-size: 1.05rem;
+  line-height: 1.15;
 }
 
 .public-home .group-selector,
@@ -2500,6 +2744,10 @@ a {
     grid-template-columns: 1fr;
   }
 
+  .second-phase-bracket {
+    grid-template-columns: 1fr;
+  }
+
   .team-detail-grid {
     grid-template-columns: 1fr;
   }
@@ -2567,6 +2815,28 @@ a {
   .public-detail-hero__top {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .hero__phase-nav {
+    width: 100%;
+  }
+
+  .hero__phase-link {
+    flex: 1 1 100%;
+    justify-content: center;
+  }
+
+  .hero__title-row {
+    gap: 12px;
+  }
+
+  .hero__phase-actions {
+    width: 100%;
+  }
+
+  .hero__phase-action {
+    flex: 1 1 100%;
+    justify-content: center;
   }
 
   .team-detail-controls__bar,
@@ -2650,6 +2920,21 @@ a {
   .public-home .progress__label-row {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .second-phase-match {
+    padding: 16px;
+  }
+
+  .second-phase-match__teams {
+    grid-template-columns: 1fr;
+    justify-items: center;
+    text-align: center;
+  }
+
+  .second-phase-slot,
+  .second-phase-slot--right {
+    text-align: center;
   }
 
   .public-home .match-card__grid {
@@ -2895,7 +3180,465 @@ a {
     line-height: 1.05;
   }
 
-  .team-detail-controls__title {
+.team-detail-controls__title {
     font-size: clamp(2.1rem, 12vw, 2.8rem);
+  }
+}
+
+/* Premium fantasy pass */
+
+body {
+  min-height: 100dvh;
+  background:
+    radial-gradient(circle at top, rgba(13, 80, 68, 0.24), transparent 24%),
+    linear-gradient(180deg, #04121f 0%, #071a2b 100%);
+}
+
+.public-home,
+.admin-theme {
+  position: relative;
+  isolation: isolate;
+}
+
+.public-home {
+  --public-title-font: Bahnschrift, "Arial Narrow", "Trebuchet MS", sans-serif;
+  --public-body-font: "Segoe UI", "Trebuchet MS", sans-serif;
+  --public-gold: #e9c27a;
+  --public-gold-soft: rgba(233, 194, 122, 0.16);
+  --public-shadow-strong: 0 30px 80px rgba(2, 8, 16, 0.42);
+  font-family: var(--public-body-font);
+}
+
+.public-home::before {
+  background:
+    radial-gradient(circle at 14% 18%, rgba(0, 225, 171, 0.12), transparent 0 18%),
+    radial-gradient(circle at 84% 12%, rgba(233, 194, 122, 0.1), transparent 0 16%),
+    radial-gradient(circle at 50% -2%, rgba(120, 209, 183, 0.12), transparent 0 24%),
+    linear-gradient(180deg, #071523 0%, #05101b 52%, #081926 100%);
+}
+
+.public-home::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(rgba(255, 255, 255, 0.018) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.018) 1px, transparent 1px);
+  background-size: 120px 120px;
+  mask-image: radial-gradient(circle at center, black 30%, transparent 86%);
+  opacity: 0.36;
+}
+
+.public-home .hero,
+.public-home .card,
+.admin-theme .hero,
+.admin-theme .card,
+.admin-theme .admin-login__panel,
+.admin-theme .admin-login__aside {
+  position: relative;
+  overflow: hidden;
+}
+
+.public-home .hero::before,
+.public-home .card::before,
+.admin-theme .hero::before,
+.admin-theme .card::before,
+.admin-theme .admin-login__panel::before,
+.admin-theme .admin-login__aside::before {
+  content: "";
+  position: absolute;
+  inset: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.public-home .hero {
+  background: transparent;
+  box-shadow: none;
+}
+
+.public-home .hero__content {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0;
+  align-items: center;
+}
+
+.public-home .hero::before,
+.public-home .hero::after,
+.public-home .hero__glow {
+  display: none;
+}
+
+.public-home .hero__eyebrow,
+.admin-theme .hero__eyebrow {
+  margin-bottom: 14px;
+}
+
+.hero__phase-nav {
+  margin-bottom: 18px;
+}
+
+.public-home .hero h1,
+.overall-classification__hero h1,
+.team-detail-controls__title,
+.admin-login__title,
+.admin-theme .hero h1 {
+  font-family: var(--public-title-font);
+  letter-spacing: -0.03em;
+  text-wrap: balance;
+}
+
+.public-home .hero h1 {
+  font-size: clamp(1.9rem, 3.1vw, 2.8rem);
+}
+
+.public-home .hero__description,
+.overall-classification__hero-copy,
+.admin-hero__subtitle,
+.admin-login__subtitle {
+  max-width: 64ch;
+  color: rgba(212, 228, 250, 0.82);
+  text-wrap: pretty;
+}
+
+.public-home .hero__headline {
+  justify-items: center;
+  width: 100%;
+}
+
+.public-home .hero__phase-arrow {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+.public-home .hero__phase-arrow,
+.public-home .group-pill,
+.public-home .round-pill,
+.admin-nav__link,
+.admin-button,
+.team-detail-toggle a,
+.overall-segmented a {
+  transition:
+    transform 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    border-color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    background 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    color 180ms cubic-bezier(0.23, 1, 0.32, 1),
+    box-shadow 180ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+.public-home .hero__phase-arrow:active,
+.public-home .group-pill:active,
+.public-home .round-pill:active,
+.admin-nav__link:active,
+.admin-button:active,
+.team-detail-toggle a:active,
+.overall-segmented a:active {
+  transform: scale(0.98);
+}
+
+.public-home .text-link,
+.admin-theme .text-link {
+  position: relative;
+  font-weight: 800;
+}
+
+.public-home .text-link::after,
+.admin-theme .text-link::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  bottom: -3px;
+  width: 100%;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.36;
+  transform: scaleX(0.72);
+  transform-origin: left center;
+  transition: transform 180ms cubic-bezier(0.23, 1, 0.32, 1), opacity 180ms ease;
+}
+
+.public-home .text-link:hover::after,
+.admin-theme .text-link:hover::after {
+  opacity: 0.88;
+  transform: scaleX(1);
+}
+
+.public-home .card,
+.public-home .match-card,
+.public-home .most-picked-item,
+.overall-group-card,
+.overall-team-row,
+.second-phase-match,
+.team-detail-panel,
+.team-detail-row,
+.team-detail-bench__item,
+.team-detail-pitch-bench__item,
+.admin-theme .card,
+.admin-theme .admin-stat,
+.admin-theme .admin-history__item,
+.admin-theme .admin-note {
+  box-shadow: 0 18px 44px rgba(1, 8, 15, 0.18);
+}
+
+.public-home__section-header,
+.public-page .card__header,
+.admin-theme .card__header {
+  padding-bottom: 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.public-home .card__title,
+.overall-group-card__title strong,
+.team-detail-panel .card__title,
+.admin-theme .card__title {
+  letter-spacing: -0.025em;
+}
+
+.public-home .match-card,
+.public-home .most-picked-item,
+.overall-group-card,
+.overall-team-row,
+.second-phase-match,
+.team-detail-row,
+.team-detail-bench__item,
+.team-detail-pitch-bench__item {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(255, 255, 255, 0)),
+    rgba(10, 23, 37, 0.78);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+.public-home .group-pill--active,
+.public-home .round-pill--active,
+.team-detail-toggle .is-active,
+.overall-segmented .is-active {
+  box-shadow:
+    0 10px 24px rgba(0, 19, 28, 0.3),
+    inset 0 1px 0 rgba(255, 255, 255, 0.12);
+}
+
+.public-home .most-picked-item__rank,
+.overall-team-rank,
+.second-phase-match__versus {
+  background:
+    linear-gradient(180deg, rgba(233, 194, 122, 0.16), rgba(233, 194, 122, 0.04)),
+    rgba(7, 19, 31, 0.92);
+  border: 1px solid rgba(233, 194, 122, 0.16);
+  color: var(--public-gold);
+}
+
+.public-home .most-picked-item__copy strong,
+.public-home .match-team__name,
+.public-home .match-team__country,
+.second-phase-slot strong,
+.team-detail-row__name,
+.team-detail-bench__name,
+.team-detail-pitch-bench__name,
+.admin-theme strong {
+  text-wrap: balance;
+}
+
+.second-phase-match__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.second-phase-match__tag {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: var(--public-gold-soft);
+  color: var(--public-gold);
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.second-phase-match__note {
+  margin: 0;
+  color: var(--public-muted);
+  line-height: 1.45;
+  font-size: 0.88rem;
+}
+
+.team-detail-controls,
+.team-detail-panel,
+.overall-classification__panel {
+  backdrop-filter: blur(18px);
+}
+
+.team-detail-pitch {
+  position: relative;
+  background:
+    radial-gradient(circle at center, rgba(49, 122, 85, 0.2), transparent 24%),
+    linear-gradient(180deg, rgba(25, 82, 55, 0.96), rgba(11, 40, 29, 0.98));
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.05),
+    inset 0 20px 30px rgba(255, 255, 255, 0.04),
+    0 16px 36px rgba(0, 0, 0, 0.2);
+}
+
+.team-detail-pitch::after {
+  content: "";
+  position: absolute;
+  inset: 14px;
+  border-radius: inherit;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), transparent 14%, transparent 86%, rgba(255, 255, 255, 0.03)),
+    repeating-linear-gradient(
+      180deg,
+      rgba(255, 255, 255, 0.03) 0,
+      rgba(255, 255, 255, 0.03) 7.6%,
+      rgba(13, 58, 36, 0.03) 7.6%,
+      rgba(13, 58, 36, 0.03) 15.2%
+    );
+  opacity: 0.9;
+}
+
+.admin-theme {
+  --admin-title-font: Bahnschrift, "Arial Narrow", "Trebuchet MS", sans-serif;
+}
+
+.admin-theme::before {
+  background:
+    radial-gradient(circle at top left, rgba(54, 255, 196, 0.12), transparent 20%),
+    radial-gradient(circle at right 12%, rgba(95, 165, 255, 0.12), transparent 18%),
+    linear-gradient(180deg, #07111c 0%, #091521 100%);
+}
+
+.admin-theme .hero {
+  background:
+    radial-gradient(circle at top right, rgba(54, 255, 196, 0.14), transparent 22%),
+    linear-gradient(135deg, rgba(9, 24, 40, 0.96), rgba(8, 54, 55, 0.88));
+}
+
+.admin-theme .hero h1,
+.admin-login__title {
+  font-family: var(--admin-title-font);
+  letter-spacing: -0.03em;
+}
+
+.admin-theme .admin-stat,
+.admin-theme .admin-history__item,
+.admin-theme .admin-note,
+.admin-theme .admin-login__panel,
+.admin-theme .admin-login__aside {
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0)),
+    rgba(10, 20, 32, 0.84);
+}
+
+.admin-theme .admin-button {
+  box-shadow: 0 14px 28px rgba(7, 35, 31, 0.24);
+}
+
+.admin-theme .admin-button--ghost {
+  box-shadow: none;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .public-home .card:hover,
+  .public-home .match-card:hover,
+  .public-home .most-picked-item:hover,
+  .overall-group-card:hover,
+  .overall-team-row:hover,
+  .second-phase-match:hover,
+  .team-detail-row:hover,
+  .team-detail-bench__item:hover,
+  .team-detail-pitch-bench__item:hover,
+  .admin-theme .card:hover,
+  .admin-theme .admin-stat:hover,
+  .admin-theme .admin-history__item:hover,
+  .admin-theme .admin-note:hover {
+    transform: translateY(-2px);
+  }
+
+  .public-home .hero__phase-arrow:hover,
+  .public-home .group-pill:hover,
+  .public-home .round-pill:hover,
+  .admin-nav__link:hover,
+  .admin-button:hover,
+  .team-detail-toggle a:hover,
+  .overall-segmented a:hover {
+    transform: translateY(-1px);
+  }
+}
+
+@media (max-width: 1080px) {
+  .public-home .hero__content {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .public-home .hero,
+  .admin-theme .hero {
+    padding: 6px 0 12px;
+  }
+
+  .public-home .hero__content {
+    gap: 0;
+  }
+
+  .hero__title-row {
+    min-height: 40px;
+    padding: 0 36px;
+  }
+
+  .hero__phase-arrow {
+    width: 36px;
+    height: 36px;
+    font-size: 1.3rem;
+  }
+
+  .hero__phase-arrow--left {
+    left: 4px;
+  }
+
+  .hero__phase-arrow--right {
+    right: 4px;
+  }
+
+  .second-phase-match__header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .public-home .hero__phase-arrow,
+  .public-home .group-pill,
+  .public-home .round-pill,
+  .public-home .text-link::after,
+  .admin-nav__link,
+  .admin-button,
+  .team-detail-toggle a,
+  .overall-segmented a,
+  .public-home .card,
+  .public-home .match-card,
+  .public-home .most-picked-item,
+  .overall-group-card,
+  .overall-team-row,
+  .second-phase-match,
+  .team-detail-row,
+  .team-detail-bench__item,
+  .team-detail-pitch-bench__item,
+  .admin-theme .card,
+  .admin-theme .admin-stat,
+  .admin-theme .admin-history__item,
+  .admin-theme .admin-note {
+    transition: none;
   }
 }

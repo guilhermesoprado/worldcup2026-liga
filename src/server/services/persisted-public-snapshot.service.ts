@@ -116,6 +116,7 @@ export class PersistedPublicSnapshotService {
           {
             id: match.id,
             phase: match.phase,
+            phaseSlot: match.phase_slot,
             groupCode: match.group_id ? groupCodeById.get(match.group_id) ?? home.groupCode : null,
             roundNumber: round.external_round_id,
             state: match.state,
