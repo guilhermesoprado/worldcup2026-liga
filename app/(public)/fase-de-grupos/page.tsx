@@ -52,6 +52,7 @@ export default async function GroupPhasePage({
           groups={overview.groups}
           activeGroupCode={overview.activeGroupCode}
           selectedRoundNumber={overview.selectedRoundNumber}
+          basePath="/fase-de-grupos"
         />
       </section>
 
@@ -88,6 +89,7 @@ export default async function GroupPhasePage({
             activeRoundNumber={overview.selectedRoundNumber}
             rounds={overview.availableRounds}
             activeGroupCode={overview.activeGroupCode}
+            basePath="/fase-de-grupos"
           />
           <div style={{ height: 18 }} />
           <MatchCards matches={overview.currentRoundMatches} />
