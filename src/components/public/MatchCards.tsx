@@ -16,6 +16,18 @@ function resolveWinner(match: PublicMatch) {
     return null;
   }
 
+  if (match.resultType === "home_win") {
+    return "home";
+  }
+
+  if (match.resultType === "away_win") {
+    return "away";
+  }
+
+  if (match.resultType === "draw") {
+    return null;
+  }
+
   const difference = Math.abs(match.homePoints! - match.awayPoints!);
 
   if (difference <= 5) {

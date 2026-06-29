@@ -32,6 +32,8 @@ export type PublicMatch = {
   awayCartolaTeamName: string;
   homePoints: number | null;
   awayPoints: number | null;
+  resultType?: "draw" | "home_win" | "away_win" | null;
+  decidedByRule?: string | null;
   kickoffLabel: string;
 };
 

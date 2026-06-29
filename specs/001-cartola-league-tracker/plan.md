@@ -158,6 +158,22 @@ public read models, and team detail:
    database after each sync, using live reconstruction only as a fallback when
    no persisted snapshot is available yet.
 
+## Knockout Sync Addendum
+
+Starting with the second phase, every new knockout phase must use the same
+operational sync semantics by default: `status_mercado = 2` computes partial
+scores for `rodada_atual`, and when `rodada_atual` advances with
+`status_mercado = 1`, the previous round is officialized. Knockout rounds must
+process the already persisted `matches` rows for that phase rather than group
+stage templates.
+
+Knockout matches cannot end in a draw. The winner is resolved by match score,
+then total championship points scored, then the group-stage campaign
+tiebreakers already used by the group table (points, wins, point difference,
+points for), then group-stage position, with a deterministic fallback only to
+guarantee a persistable winner. Future knockout phases must inherit this
+behavior without requiring a new product decision.
+
 ## Constitution Check
 
 *GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*

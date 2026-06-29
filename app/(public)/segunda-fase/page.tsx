@@ -1,5 +1,6 @@
 import { EmptyState } from "@/components/public/EmptyState";
 import { MatchCards } from "@/components/public/MatchCards";
+import { MostPickedList } from "@/components/public/MostPickedList";
 import { PhaseHero } from "@/components/public/PhaseHero";
 import { PublicReadinessService } from "@/server/services/public-readiness.service";
 
@@ -10,6 +11,7 @@ const publicReadinessService = new PublicReadinessService();
 export default async function SecondPhasePage() {
   const snapshot = await publicReadinessService.ensurePublicDataReady();
   const secondPhaseMatches = snapshot.matches.filter((match) => match.phase === "round_of_32");
+  const secondPhaseMostPicked = snapshot.mostPickedByRound["4"] ?? [];
 
   return (
     <main className="shell public-home">
@@ -28,6 +30,22 @@ export default async function SecondPhasePage() {
           <EmptyState
             title="Segunda fase ainda nao gerada"
             description="Os confrontos aparecerao aqui depois que o administrador gerar os 16 avos com a classificacao final."
+          />
+        )}
+      </section>
+
+      <section className="card public-home__panel public-home__panel--wide">
+        <div className="card__header public-home__section-header">
+          <div>
+            <h2 className="card__title">Jogadores mais escalados</h2>
+          </div>
+        </div>
+        {secondPhaseMostPicked.length > 0 ? (
+          <MostPickedList players={secondPhaseMostPicked.slice(0, 7)} />
+        ) : (
+          <EmptyState
+            title="Sem escalações para a segunda fase"
+            description="O ranking aparece quando a rodada tiver jogadores efetivamente contabilizados pelo Cartola."
           />
         )}
       </section>

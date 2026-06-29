@@ -132,6 +132,8 @@ export class PersistedPublicSnapshotService {
               typeof match.home_points === "number" ? Number(match.home_points) : null,
             awayPoints:
               typeof match.away_points === "number" ? Number(match.away_points) : null,
+            resultType: match.result_type as PublicMatch["resultType"],
+            decidedByRule: match.decided_by_rule,
             kickoffLabel: `${round.external_round_id}a rodada`
           }
         ];

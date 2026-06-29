@@ -16,6 +16,10 @@ import {
   participants as staticParticipants,
   resolveParticipantByCountry
 } from "@/domain/participants/static-league-data";
+import {
+  resolveKnockoutResult,
+  type KnockoutCampaignTiebreaker
+} from "@/domain/knockout/resolve-knockout-result";
 import { cartolaClient } from "@/lib/cartola/client";
 import {
   mapAthleteCatalog,
@@ -53,11 +57,14 @@ type SyncPublicMatch = {
   awayParticipantId: string;
   homePoints: number | null;
   awayPoints: number | null;
+  resultType?: "draw" | "home_win" | "away_win" | null;
+  decidedByRule?: string | null;
 };
 
 type RoundProcessingState = "partial" | "official";
 
 type ProcessedRound = {
+  phase: "groups" | "knockout";
   matches: SyncPublicMatch[];
   lineups: Array<
     NormalizedLineup & {
@@ -70,6 +77,7 @@ type ProcessedRound = {
 };
 
 const GROUP_STAGE_ROUNDS = [1, 2, 3] as const;
+const GROUP_PHASE = "groups";
 const GROUP_STAGE_TOTAL_MATCHES = 72;
 const ROUND_PAIRINGS: Record<number, [number, number][]> = {
   1: [
@@ -190,14 +198,24 @@ export class SyncService {
     const startedAt = new Date().toISOString();
 
     try {
-      const [marketStatus, fixtures, athletesMarket, athletesScored, participants, persistedRounds] =
-        await Promise.all([
+      const [
+        marketStatus,
+        fixtures,
+        athletesMarket,
+        athletesScored,
+        participants,
+        persistedRounds,
+        persistedMatches,
+        persistedStandings
+      ] = await Promise.all([
           cartolaClient.getMarketStatus(),
           cartolaClient.getFixtures(),
           cartolaClient.getAthletesMarket().catch(() => null),
           cartolaClient.getAthletesScored().catch(() => null),
           this.getParticipantsForSync(),
-          this.roundRepository.listAll()
+          this.roundRepository.listAll(),
+          this.matchRepository.listAll(),
+          this.standingsSnapshotRepository.listAll()
         ]);
 
       const marketState = resolveMarketState(marketStatus);
@@ -217,21 +235,48 @@ export class SyncService {
       const athleteCatalog = athletesMarket
         ? mapAthleteCatalog(athletesMarket)
         : new Map();
-      const officialRoundsToBackfill = GROUP_STAGE_ROUNDS.filter((roundNumber) =>
+      const persistedRoundIdToNumberBeforePersist = new Map(
+        persistedRounds.map((round) => [round.id, round.external_round_id])
+      );
+      const persistedKnockoutMatchesByRound = this.buildPersistedKnockoutMatchesByRound({
+        persistedMatches,
+        persistedRoundIdToNumber: persistedRoundIdToNumberBeforePersist,
+        participants
+      });
+      const knockoutRoundNumbers = [...persistedKnockoutMatchesByRound.keys()].sort(
+        (left, right) => left - right
+      );
+      const officialGroupRoundsToBackfill = GROUP_STAGE_ROUNDS.filter((roundNumber) =>
         roundNumber <= marketState.officialRoundNumber &&
         (
           mode === "officialized_only" ||
           !this.isOfficialRoundPersisted(roundNumber, persistedRounds)
         )
       );
+      const officialKnockoutRoundsToBackfill = knockoutRoundNumbers.filter((roundNumber) =>
+        roundNumber <= marketState.officialRoundNumber &&
+        (
+          mode === "officialized_only" ||
+          !this.isOfficialRoundPersisted(roundNumber, persistedRounds)
+        )
+      );
+      const partialRoundNumbers =
+        marketState.partialRoundNumber !== null &&
+        (
+          GROUP_STAGE_ROUNDS.includes(
+            marketState.partialRoundNumber as (typeof GROUP_STAGE_ROUNDS)[number]
+          ) ||
+          knockoutRoundNumbers.includes(marketState.partialRoundNumber)
+        )
+          ? [marketState.partialRoundNumber]
+          : [];
       const roundsToProcess =
         mode === "officialized_only"
-          ? officialRoundsToBackfill
+          ? [...officialGroupRoundsToBackfill, ...officialKnockoutRoundsToBackfill]
           : [
-              ...officialRoundsToBackfill,
-              ...(marketState.partialRoundNumber !== null
-                ? [marketState.partialRoundNumber]
-                : [])
+              ...officialGroupRoundsToBackfill,
+              ...officialKnockoutRoundsToBackfill,
+              ...partialRoundNumbers
             ].filter((roundNumber, index, values) => values.indexOf(roundNumber) === index);
 
       if (roundsToProcess.length === 0) {
@@ -241,7 +286,8 @@ export class SyncService {
           officialRoundNumber: marketState.officialRoundNumber,
           partialRoundNumber: marketState.partialRoundNumber,
           marketStatusCode: String(marketState.marketStatusCode),
-          processedRoundNumbers: []
+          processedRoundNumbers: [],
+          knockoutRoundNumbers
         });
 
         const execution = await this.syncExecutionRepository.create({
@@ -267,14 +313,14 @@ export class SyncService {
         return { execution, currentRoundNumber: marketState.displayRoundNumber };
       }
 
-      const persistedMatches = await this.matchRepository.listAll();
       const roundsAfterPersist = await this.persistRounds({
         persistedRounds,
         currentRoundNumber: marketState.apiCurrentRoundNumber,
         officialRoundNumber: marketState.officialRoundNumber,
         partialRoundNumber: marketState.partialRoundNumber,
         marketStatusCode: String(marketState.marketStatusCode),
-        processedRoundNumbers: roundsToProcess
+        processedRoundNumbers: roundsToProcess,
+        knockoutRoundNumbers
       });
       const roundByNumber = new Map(
         roundsAfterPersist.map((round) => [round.external_round_id, round])
@@ -283,6 +329,11 @@ export class SyncService {
         roundsAfterPersist.map((round) => [round.id, round.external_round_id])
       );
       const persistedOfficialMatchesByRound = new Map<number, SyncPublicMatch[]>();
+      const groupCampaignTiebreakers = this.buildGroupCampaignTiebreakers({
+        rounds: roundsAfterPersist,
+        standings: persistedStandings,
+        participants
+      });
 
       for (const match of persistedMatches) {
         const roundNumber = persistedRoundIdToNumber.get(match.round_id);
@@ -310,7 +361,9 @@ export class SyncService {
           homePoints:
             typeof match.home_points === "number" ? Number(match.home_points) : null,
           awayPoints:
-            typeof match.away_points === "number" ? Number(match.away_points) : null
+            typeof match.away_points === "number" ? Number(match.away_points) : null,
+          resultType: match.result_type as SyncPublicMatch["resultType"],
+          decidedByRule: match.decided_by_rule
         });
         persistedOfficialMatchesByRound.set(roundNumber, current);
       }
@@ -322,23 +375,42 @@ export class SyncService {
       for (const roundNumber of [...roundsToProcess].sort((left, right) => left - right)) {
         const state: RoundProcessingState =
           marketState.partialRoundNumber === roundNumber ? "partial" : "official";
+        const isGroupStageRound = this.isGroupStageRound(roundNumber);
+        const participantsForRound = isGroupStageRound
+          ? participants
+          : this.resolveKnockoutParticipantsForRound({
+              roundNumber,
+              participants,
+              persistedKnockoutMatchesByRound
+            });
         const lineups = await this.loadLineupsForRound({
           roundNumber,
           state,
-          participants,
+          participants: participantsForRound,
           athleteCatalog,
           market: athletesMarket,
           partialIndex,
           startedClubIds
         });
-        const matches = this.buildMatchesForRound({
-          roundNumber,
-          state,
-          fixtures,
-          lineups
-        });
+        const matches = isGroupStageRound
+          ? this.buildMatchesForRound({
+              roundNumber,
+              state,
+              fixtures,
+              lineups
+            })
+          : this.buildKnockoutMatchesForRound({
+              roundNumber,
+              state,
+              lineups,
+              persistedKnockoutMatchesByRound,
+              persistedOfficialMatchesByRound,
+              processedRounds,
+              groupCampaignTiebreakers
+            });
 
         processedRounds.set(roundNumber, {
+          phase: isGroupStageRound ? "groups" : "knockout",
           matches,
           lineups,
           state
@@ -353,11 +425,14 @@ export class SyncService {
           continue;
         }
 
-        const standings = this.buildStandingsForRound({
-          roundNumber,
-          processedRounds,
-          persistedOfficialMatchesByRound
-        });
+        const standings =
+          processedRound.phase === "groups"
+            ? this.buildStandingsForRound({
+                roundNumber,
+                processedRounds,
+                persistedOfficialMatchesByRound
+              })
+            : [];
 
         await this.matchRepository.replaceRoundMatches(
           round.id,
@@ -377,43 +452,47 @@ export class SyncService {
             homePoints: match.homePoints,
             awayPoints: match.awayPoints,
             resultType:
-              match.homePoints === null || match.awayPoints === null
+              match.resultType ??
+              (match.homePoints === null || match.awayPoints === null
                 ? null
-                : this.resolveResultType(match.homePoints, match.awayPoints),
+                : this.resolveResultType(match.homePoints, match.awayPoints)),
             state: processedRound.state,
             decidedByRule:
-              match.homePoints === null || match.awayPoints === null
+              match.decidedByRule ??
+              (match.homePoints === null || match.awayPoints === null
                 ? "score"
                 : Math.abs(match.homePoints - match.awayPoints) <= 5
                   ? "draw_threshold"
-                  : "score"
+                  : "score")
           }))
         );
 
-        await this.standingsSnapshotRepository.replaceRoundSnapshots(
-          round.id,
-          standings.map((standing) => ({
-            scope: "group",
-            phase: "groups",
-            groupId:
-              participants.find((participant) => participant.staticId === standing.participantId)
-                ?.groupId ?? null,
-            participantId: participants.find(
-              (participant) => participant.staticId === standing.participantId
-            )!.id,
-            roundId: round.id,
-            points: standing.points,
-            wins: standing.wins,
-            draws: standing.draws,
-            losses: standing.losses,
-            pointsFor: standing.pointsFor,
-            pointsAgainst: standing.pointsAgainst,
-            pointsDifference: standing.pointsDifference,
-            position: standing.position,
-            statusLabel: standing.statusLabel,
-            state: processedRound.state
-          }))
-        );
+        if (processedRound.phase === "groups") {
+          await this.standingsSnapshotRepository.replaceRoundSnapshots(
+            round.id,
+            standings.map((standing) => ({
+              scope: "group",
+              phase: "groups",
+              groupId:
+                participants.find((participant) => participant.staticId === standing.participantId)
+                  ?.groupId ?? null,
+              participantId: participants.find(
+                (participant) => participant.staticId === standing.participantId
+              )!.id,
+              roundId: round.id,
+              points: standing.points,
+              wins: standing.wins,
+              draws: standing.draws,
+              losses: standing.losses,
+              pointsFor: standing.pointsFor,
+              pointsAgainst: standing.pointsAgainst,
+              pointsDifference: standing.pointsDifference,
+              position: standing.position,
+              statusLabel: standing.statusLabel,
+              state: processedRound.state
+            }))
+          );
+        }
 
         await this.lineupSnapshotRepository.replaceRoundSnapshots(
           round.id,
@@ -556,7 +635,8 @@ export class SyncService {
     officialRoundNumber,
     partialRoundNumber,
     marketStatusCode,
-    processedRoundNumbers
+    processedRoundNumbers,
+    knockoutRoundNumbers
   }: {
     persistedRounds: Awaited<ReturnType<RoundRepository["listAll"]>>;
     currentRoundNumber: number;
@@ -564,12 +644,16 @@ export class SyncService {
     partialRoundNumber: number | null;
     marketStatusCode: string;
     processedRoundNumbers: number[];
+    knockoutRoundNumbers: number[];
   }) {
     const syncedAt = new Date().toISOString();
     const processedSet = new Set(processedRoundNumbers);
+    const roundNumbers = [...new Set([...GROUP_STAGE_ROUNDS, ...knockoutRoundNumbers])].sort(
+      (left, right) => left - right
+    );
 
     return Promise.all(
-      GROUP_STAGE_ROUNDS.map((roundNumber) => {
+      roundNumbers.map((roundNumber) => {
         const existing = persistedRounds.find((round) => round.external_round_id === roundNumber);
         const status = this.resolveRoundStatus({
           roundNumber,
@@ -579,7 +663,7 @@ export class SyncService {
 
         return this.roundRepository.upsert({
           externalRoundId: roundNumber,
-          name: formatRoundLabel(roundNumber),
+          name: existing?.name ?? formatRoundLabel(roundNumber),
           status,
           marketStatus: marketStatusCode,
           officializedAt:
@@ -618,6 +702,119 @@ export class SyncService {
     }
 
     return "scheduled";
+  }
+
+  private isGroupStageRound(roundNumber: number) {
+    return GROUP_STAGE_ROUNDS.includes(roundNumber as (typeof GROUP_STAGE_ROUNDS)[number]);
+  }
+
+  private buildPersistedKnockoutMatchesByRound({
+    persistedMatches,
+    persistedRoundIdToNumber,
+    participants
+  }: {
+    persistedMatches: Awaited<ReturnType<MatchRepository["listAll"]>>;
+    persistedRoundIdToNumber: Map<string, number>;
+    participants: SyncParticipant[];
+  }) {
+    const participantByDbId = new Map(participants.map((participant) => [participant.id, participant]));
+    const matchesByRound = new Map<number, SyncPublicMatch[]>();
+
+    for (const match of persistedMatches) {
+      if (match.phase === GROUP_PHASE) {
+        continue;
+      }
+
+      const roundNumber = persistedRoundIdToNumber.get(match.round_id);
+      const homeParticipant = participantByDbId.get(match.home_participant_id);
+      const awayParticipant = participantByDbId.get(match.away_participant_id);
+
+      if (!roundNumber || !homeParticipant || !awayParticipant) {
+        continue;
+      }
+
+      const current = matchesByRound.get(roundNumber) ?? [];
+      current.push({
+        id: match.id,
+        phase: match.phase,
+        phaseSlot: match.phase_slot,
+        groupCode: null,
+        roundNumber,
+        state: match.state,
+        homeParticipantId: homeParticipant.staticId,
+        awayParticipantId: awayParticipant.staticId,
+        homePoints: typeof match.home_points === "number" ? Number(match.home_points) : null,
+        awayPoints: typeof match.away_points === "number" ? Number(match.away_points) : null,
+        resultType: match.result_type as SyncPublicMatch["resultType"],
+        decidedByRule: match.decided_by_rule
+      });
+      matchesByRound.set(roundNumber, current);
+    }
+
+    return matchesByRound;
+  }
+
+  private resolveKnockoutParticipantsForRound({
+    roundNumber,
+    participants,
+    persistedKnockoutMatchesByRound
+  }: {
+    roundNumber: number;
+    participants: SyncParticipant[];
+    persistedKnockoutMatchesByRound: Map<number, SyncPublicMatch[]>;
+  }) {
+    const matches = persistedKnockoutMatchesByRound.get(roundNumber) ?? [];
+    const participantIds = new Set(
+      matches.flatMap((match) => [match.homeParticipantId, match.awayParticipantId])
+    );
+
+    return participants.filter((participant) => participantIds.has(participant.staticId));
+  }
+
+  private buildGroupCampaignTiebreakers({
+    rounds,
+    standings,
+    participants
+  }: {
+    rounds: Awaited<ReturnType<RoundRepository["listAll"]>>;
+    standings: Awaited<ReturnType<StandingsSnapshotRepository["listAll"]>>;
+    participants: SyncParticipant[];
+  }) {
+    const finalGroupRound = [...rounds]
+      .filter((round) => this.isGroupStageRound(round.external_round_id) && round.status === "official")
+      .sort((left, right) => right.external_round_id - left.external_round_id)[0];
+    const participantByDbId = new Map(participants.map((participant) => [participant.id, participant]));
+    const tiebreakers = new Map<string, KnockoutCampaignTiebreaker>();
+
+    if (!finalGroupRound) {
+      return tiebreakers;
+    }
+
+    for (const standing of standings) {
+      if (standing.round_id !== finalGroupRound.id || standing.phase !== GROUP_PHASE) {
+        continue;
+      }
+
+      const participant = participantByDbId.get(standing.participant_id);
+
+      if (!participant) {
+        continue;
+      }
+
+      tiebreakers.set(participant.staticId, {
+        participantId: participant.staticId,
+        championshipPointsFor: Number(standing.points_for),
+        groupCampaign: {
+          position: standing.position,
+          points: standing.points,
+          wins: standing.wins,
+          pointsDifference: Number(standing.points_difference),
+          pointsFor: Number(standing.points_for)
+        }
+      });
+    }
+
+    return tiebreakers;
   }
 
   private async getParticipantsForSync(): Promise<SyncParticipant[]> {
@@ -788,6 +985,154 @@ export class SyncService {
       homePoints: Number((pointsByParticipantId.get(match.homeParticipantId) ?? 0).toFixed(2)),
       awayPoints: Number((pointsByParticipantId.get(match.awayParticipantId) ?? 0).toFixed(2))
     }));
+  }
+
+  private buildKnockoutMatchesForRound({
+    roundNumber,
+    state,
+    lineups,
+    persistedKnockoutMatchesByRound,
+    persistedOfficialMatchesByRound,
+    processedRounds,
+    groupCampaignTiebreakers
+  }: {
+    roundNumber: number;
+    state: RoundProcessingState;
+    lineups: Array<
+      NormalizedLineup & {
+        participantDbId: string;
+        participantStaticId: string;
+        rawPayloadRef: string;
+      }
+    >;
+    persistedKnockoutMatchesByRound: Map<number, SyncPublicMatch[]>;
+    persistedOfficialMatchesByRound: Map<number, SyncPublicMatch[]>;
+    processedRounds: Map<number, ProcessedRound>;
+    groupCampaignTiebreakers: Map<string, KnockoutCampaignTiebreaker>;
+  }) {
+    const baseMatches = persistedKnockoutMatchesByRound.get(roundNumber) ?? [];
+    const pointsByParticipantId = new Map(
+      lineups.map((lineup) => [lineup.participantStaticId, lineup.totalPoints])
+    );
+
+    return baseMatches.map((match) => {
+      const homePoints = Number((pointsByParticipantId.get(match.homeParticipantId) ?? 0).toFixed(2));
+      const awayPoints = Number((pointsByParticipantId.get(match.awayParticipantId) ?? 0).toFixed(2));
+      const knockoutResult = resolveKnockoutResult({
+        homePoints,
+        awayPoints,
+        homeTiebreaker: this.buildKnockoutTiebreaker({
+          participantId: match.homeParticipantId,
+          roundNumber,
+          groupCampaignTiebreakers,
+          persistedOfficialMatchesByRound,
+          processedRounds
+        }),
+        awayTiebreaker: this.buildKnockoutTiebreaker({
+          participantId: match.awayParticipantId,
+          roundNumber,
+          groupCampaignTiebreakers,
+          persistedOfficialMatchesByRound,
+          processedRounds
+        })
+      });
+
+      return {
+        ...match,
+        state,
+        homePoints,
+        awayPoints,
+        resultType: knockoutResult.resultType,
+        decidedByRule: knockoutResult.decidedByRule
+      };
+    });
+  }
+
+  private buildKnockoutTiebreaker({
+    participantId,
+    roundNumber,
+    groupCampaignTiebreakers,
+    persistedOfficialMatchesByRound,
+    processedRounds
+  }: {
+    participantId: string;
+    roundNumber: number;
+    groupCampaignTiebreakers: Map<string, KnockoutCampaignTiebreaker>;
+    persistedOfficialMatchesByRound: Map<number, SyncPublicMatch[]>;
+    processedRounds: Map<number, ProcessedRound>;
+  }): KnockoutCampaignTiebreaker {
+    const groupTiebreaker = groupCampaignTiebreakers.get(participantId);
+
+    if (!groupTiebreaker) {
+      throw new Error(`Campanha da fase de grupos nao encontrada para ${participantId}.`);
+    }
+
+    return {
+      ...groupTiebreaker,
+      championshipPointsFor: Number(
+        (
+          groupTiebreaker.championshipPointsFor +
+          this.sumPreviousKnockoutPoints({
+            participantId,
+            roundNumber,
+            persistedOfficialMatchesByRound,
+            processedRounds
+          })
+        ).toFixed(2)
+      )
+    };
+  }
+
+  private sumPreviousKnockoutPoints({
+    participantId,
+    roundNumber,
+    persistedOfficialMatchesByRound,
+    processedRounds
+  }: {
+    participantId: string;
+    roundNumber: number;
+    persistedOfficialMatchesByRound: Map<number, SyncPublicMatch[]>;
+    processedRounds: Map<number, ProcessedRound>;
+  }) {
+    let total = 0;
+
+    for (const [currentRoundNumber, matches] of persistedOfficialMatchesByRound.entries()) {
+      if (currentRoundNumber >= roundNumber) {
+        continue;
+      }
+
+      for (const match of matches) {
+        if (match.phase === GROUP_PHASE) {
+          continue;
+        }
+
+        if (match.homeParticipantId === participantId) {
+          total += match.homePoints ?? 0;
+        }
+
+        if (match.awayParticipantId === participantId) {
+          total += match.awayPoints ?? 0;
+        }
+      }
+    }
+
+    for (const [currentRoundNumber, processedRound] of processedRounds.entries()) {
+      if (currentRoundNumber >= roundNumber || processedRound.phase !== "knockout") {
+        continue;
+      }
+
+      for (const match of processedRound.matches) {
+        if (match.homeParticipantId === participantId) {
+          total += match.homePoints ?? 0;
+        }
+
+        if (match.awayParticipantId === participantId) {
+          total += match.awayPoints ?? 0;
+        }
+      }
+    }
+
+    return total;
   }
 
   private buildStandingsForRound({
