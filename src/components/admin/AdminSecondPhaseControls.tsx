@@ -12,6 +12,7 @@ export function AdminSecondPhaseControls({
 }) {
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
+  const [roundOf16Logs, setRoundOf16Logs] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
 
   const generateSecondPhase = () => {
@@ -53,6 +54,7 @@ export function AdminSecondPhaseControls({
 
   const generateRoundOf16 = () => {
     setMessage(null);
+    setRoundOf16Logs([]);
 
     if (
       roundOf16GeneratedMatches > 0 &&
@@ -72,15 +74,21 @@ export function AdminSecondPhaseControls({
           generatedMatches?: number;
           sourceRoundName?: string;
           message?: string;
+          logs?: string[];
+          details?: { logs?: string[] };
         };
+        const logs = body.logs ?? body.details?.logs ?? [];
 
         if (!response.ok) {
-          throw new Error(body.message ?? "Falha ao gerar oitavas de final");
+          setMessage(body.message ?? "Falha ao gerar oitavas de final");
+          setRoundOf16Logs(logs);
+          return;
         }
 
         setMessage(
           `${body.generatedMatches ?? 0} confrontos de oitavas gerados a partir de ${body.sourceRoundName ?? "segunda fase"}.`
         );
+        setRoundOf16Logs(logs);
         router.refresh();
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "Falha inesperada.");
@@ -117,6 +125,15 @@ export function AdminSecondPhaseControls({
           : "As oitavas serao geradas a partir dos vencedores oficiais da segunda fase."}
       </p>
       {message ? <p className="muted">{message}</p> : null}
+      {roundOf16Logs.length > 0 ? (
+        <div className="admin-log">
+          {roundOf16Logs.map((log) => (
+            <p className="muted" key={log}>
+              {log}
+            </p>
+          ))}
+        </div>
+      ) : null}
     </div>
   );
 }
