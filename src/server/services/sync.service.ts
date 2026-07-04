@@ -37,7 +37,7 @@ import { SyncConfigRepository } from "@/server/repositories/sync-config.reposito
 import { SyncExecutionRepository } from "@/server/repositories/sync-execution.repository";
 
 type SyncTriggerType = "automatic_access" | "manual_admin";
-type SyncMode = "default" | "officialized_only";
+type SyncMode = "default" | "officialized_only" | "specific_round";
 
 type SyncParticipant = {
   id: string;
@@ -143,6 +143,14 @@ export class SyncService {
     return this.runSync("manual_admin", "officialized_only");
   }
 
+  async runSpecificRoundSync(roundNumber: number) {
+    if (!Number.isInteger(roundNumber) || roundNumber <= 3) {
+      throw new HttpError(400, "Selecione uma rodada de mata-mata valida para reprocessar.");
+    }
+
+    return this.runSync("manual_admin", "specific_round", roundNumber);
+  }
+
   async getAdminStatus() {
     const [
       config,
@@ -182,6 +190,14 @@ export class SyncService {
       currentRound,
       officialRound,
       lastSyncedRound,
+      reprocessableRounds: rounds
+        .filter((round) => round.external_round_id > 3 && round.status !== "scheduled")
+        .map((round) => ({
+          id: round.id,
+          externalRoundId: round.external_round_id,
+          name: round.name,
+          status: round.status
+        })),
       totalMatches: GROUP_STAGE_TOTAL_MATCHES,
       recentExecutions,
       persistedSnapshotCounts: {
@@ -194,7 +210,11 @@ export class SyncService {
     };
   }
 
-  private async runSync(triggerType: SyncTriggerType, mode: SyncMode = "default") {
+  private async runSync(
+    triggerType: SyncTriggerType,
+    mode: SyncMode = "default",
+    targetRoundNumber?: number
+  ) {
     const startedAt = new Date().toISOString();
 
     try {
@@ -270,8 +290,20 @@ export class SyncService {
         )
           ? [marketState.partialRoundNumber]
           : [];
+      const specificRoundNumbers =
+        mode === "specific_round" &&
+        typeof targetRoundNumber === "number" &&
+        knockoutRoundNumbers.includes(targetRoundNumber) &&
+        (
+          targetRoundNumber <= marketState.officialRoundNumber ||
+          targetRoundNumber === marketState.partialRoundNumber
+        )
+          ? [targetRoundNumber]
+          : [];
       const roundsToProcess =
-        mode === "officialized_only"
+        mode === "specific_round"
+          ? specificRoundNumbers
+          : mode === "officialized_only"
           ? [...officialGroupRoundsToBackfill, ...officialKnockoutRoundsToBackfill]
           : [
               ...officialGroupRoundsToBackfill,
@@ -294,7 +326,9 @@ export class SyncService {
           triggerType,
           status: "skipped",
           summaryMessage: `${
-            mode === "officialized_only"
+            mode === "specific_round"
+              ? "A rodada selecionada nao esta elegivel para reprocessamento."
+              : mode === "officialized_only"
               ? "Nenhuma rodada oficializada precisou de reprocessamento."
               : "Nenhuma rodada precisou de reprocessamento."
           } Estado oficial atual: ${
@@ -595,7 +629,9 @@ export class SyncService {
         triggerType,
         status: "success",
         summaryMessage:
-          mode === "officialized_only"
+          mode === "specific_round"
+            ? `Reprocessamento concluido para ${formatRoundLabel(targetRoundNumber ?? marketState.displayRoundNumber)}.`
+            : mode === "officialized_only"
             ? `Sincronizacao de rodadas oficializadas concluida com ${roundsToProcess.length} rodada(s) processada(s).`
             : `Sync concluido para ${formatRoundLabel(marketState.displayRoundNumber)} com ${roundsToProcess.length} rodada(s) processada(s).`,
         startedAt,

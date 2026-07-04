@@ -74,6 +74,7 @@ export default async function AdminDashboardPage() {
             <AdminSyncControls
               isEnabled={status.config.is_enabled}
               intervalMinutes={status.config.interval_minutes}
+              reprocessableRounds={status.reprocessableRounds}
             />
           </article>
 

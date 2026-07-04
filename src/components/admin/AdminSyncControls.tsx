@@ -5,29 +5,38 @@ import { useState, useTransition } from "react";
 
 export function AdminSyncControls({
   isEnabled,
-  intervalMinutes
+  intervalMinutes,
+  reprocessableRounds
 }: {
   isEnabled: boolean;
   intervalMinutes: number;
+  reprocessableRounds: Array<{
+    externalRoundId: number;
+    name: string;
+    status: string;
+  }>;
 }) {
   const router = useRouter();
+  const [selectedRoundNumber, setSelectedRoundNumber] = useState(
+    String(reprocessableRounds.at(-1)?.externalRoundId ?? "")
+  );
   const [message, setMessage] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
-  const runAction = (action: "sync" | "sync_officialized" | "toggle") => {
+  const runAction = (action: "sync" | "sync_round" | "toggle") => {
     setMessage(null);
 
     startTransition(async () => {
       try {
-        if (action === "sync" || action === "sync_officialized") {
+        if (action === "sync" || action === "sync_round") {
           const response = await fetch("/api/admin/sync", {
             method: "POST",
             headers: {
               "Content-Type": "application/json"
             },
             body:
-              action === "sync_officialized"
-                ? JSON.stringify({ mode: "officialized" })
+              action === "sync_round"
+                ? JSON.stringify({ mode: "round", roundNumber: Number(selectedRoundNumber) })
                 : undefined
           });
           const body = (await response.json()) as { execution?: { summary_message?: string }; message?: string };
@@ -74,13 +83,27 @@ export function AdminSyncControls({
       >
         {isPending ? "processando..." : "sync now"}
       </button>
+      <label className="admin-field">
+        <span>Rodada para reprocessar</span>
+        <select
+          value={selectedRoundNumber}
+          onChange={(event) => setSelectedRoundNumber(event.target.value)}
+          disabled={isPending || reprocessableRounds.length === 0}
+        >
+          {reprocessableRounds.map((round) => (
+            <option key={round.externalRoundId} value={round.externalRoundId}>
+              {round.name} ({round.status})
+            </option>
+          ))}
+        </select>
+      </label>
       <button
         type="button"
         className="admin-button"
-        onClick={() => runAction("sync_officialized")}
-        disabled={isPending}
+        onClick={() => runAction("sync_round")}
+        disabled={isPending || selectedRoundNumber.length === 0}
       >
-        {isPending ? "processando..." : "sincronizar rodadas oficializadas"}
+        {isPending ? "processando..." : "reprocessar rodada"}
       </button>
       <button
         type="button"
