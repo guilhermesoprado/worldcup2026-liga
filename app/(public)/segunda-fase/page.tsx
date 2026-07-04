@@ -15,7 +15,7 @@ export default async function SecondPhasePage() {
   const secondPhaseMostPicked = snapshot.mostPickedByRound["4"] ?? [];
   const roundOf16Matches = snapshot.matches.filter((match) => match.phase === "round_of_16");
   const roundOf16Available =
-    snapshot.currentRoundNumber >= ROUND_OF_16_EXTERNAL_ROUND_ID && roundOf16Matches.length > 0;
+    snapshot.availableRounds.includes(ROUND_OF_16_EXTERNAL_ROUND_ID) && roundOf16Matches.length > 0;
 
   return (
     <main className="shell public-home">
