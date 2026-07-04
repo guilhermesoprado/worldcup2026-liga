@@ -38,6 +38,13 @@ export type RoundOf32Slot = {
   awaySeed: BracketSeed;
 };
 
+export type RoundOf16Slot = {
+  phaseSlot: string;
+  gameNumber: number;
+  homeSourceGameNumber: number;
+  awaySourceGameNumber: number;
+};
+
 export const roundOf32Matrix: RoundOf32Slot[] = [
   { phaseSlot: "R32-73", gameNumber: 73, homeSeed: "A2", awaySeed: "B2" },
   {
@@ -95,6 +102,17 @@ export const roundOf32Matrix: RoundOf32Slot[] = [
     awaySeed: { label: "third", eligibleGroups: ["D", "E", "I", "J", "L"] }
   },
   { phaseSlot: "R32-88", gameNumber: 88, homeSeed: "D2", awaySeed: "G2" }
+];
+
+export const roundOf16Matrix: RoundOf16Slot[] = [
+  { phaseSlot: "R16-89", gameNumber: 89, homeSourceGameNumber: 74, awaySourceGameNumber: 77 },
+  { phaseSlot: "R16-90", gameNumber: 90, homeSourceGameNumber: 73, awaySourceGameNumber: 75 },
+  { phaseSlot: "R16-91", gameNumber: 91, homeSourceGameNumber: 76, awaySourceGameNumber: 78 },
+  { phaseSlot: "R16-92", gameNumber: 92, homeSourceGameNumber: 79, awaySourceGameNumber: 80 },
+  { phaseSlot: "R16-93", gameNumber: 93, homeSourceGameNumber: 83, awaySourceGameNumber: 84 },
+  { phaseSlot: "R16-94", gameNumber: 94, homeSourceGameNumber: 81, awaySourceGameNumber: 82 },
+  { phaseSlot: "R16-95", gameNumber: 95, homeSourceGameNumber: 86, awaySourceGameNumber: 88 },
+  { phaseSlot: "R16-96", gameNumber: 96, homeSourceGameNumber: 85, awaySourceGameNumber: 87 }
 ];
 
 export const bracketMatrix = roundOf32Matrix;

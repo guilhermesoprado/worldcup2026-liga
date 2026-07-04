@@ -43,7 +43,8 @@ function normalizePosition(positionName: string) {
   if (normalized.includes("goleiro")) return "GOL" as const;
   if (normalized.includes("lateral")) return "LAT" as const;
   if (normalized.includes("zagueiro")) return "ZAG" as const;
-  if (normalized.includes("meia") || normalized.includes("meio-campo")) return "MEI" as const;
+  if (normalized.includes("meia") || normalized.includes("meio-campo"))
+    return "MEI" as const;
   if (normalized.includes("atacante")) return "ATA" as const;
   return "TEC" as const;
 }
@@ -74,7 +75,9 @@ function sortMainPlayers(players: PublicLineupPlayer[]) {
       return orderDiff;
     }
 
-    return getPlayerLabel(left.playerName).localeCompare(getPlayerLabel(right.playerName));
+    return getPlayerLabel(left.playerName).localeCompare(
+      getPlayerLabel(right.playerName)
+    );
   });
 }
 
@@ -88,14 +91,25 @@ function sortReservePlayers(players: PublicLineupPlayer[]) {
       return orderDiff;
     }
 
-    return getPlayerLabel(left.playerName).localeCompare(getPlayerLabel(right.playerName));
+    return getPlayerLabel(left.playerName).localeCompare(
+      getPlayerLabel(right.playerName)
+    );
   });
 }
 
-function getCoordsForCount(count: number, y: number, minX: number, maxX: number) {
+function getCoordsForCount(
+  count: number,
+  y: number,
+  minX: number,
+  maxX: number
+) {
   if (count === 0) return [];
   if (count === 1) return [{ x: 50, y }];
-  if (count === 2) return [{ x: 34, y }, { x: 66, y }];
+  if (count === 2)
+    return [
+      { x: 34, y },
+      { x: 66, y }
+    ];
 
   const step = (maxX - minX) / (count - 1);
 
@@ -214,7 +228,8 @@ function buildReplacementMap(detail: PublicTeamDetail): ReplacementMap {
         reserve.athleteId !== detail.reserveLuxuryId &&
         reserve.counted &&
         !usedReserveIds.has(reserve.athleteId) &&
-        normalizePosition(reserve.positionName) === normalizePosition(starter.positionName)
+        normalizePosition(reserve.positionName) ===
+          normalizePosition(starter.positionName)
     );
 
     if (!replacement) {
@@ -232,14 +247,18 @@ function buildReplacementMap(detail: PublicTeamDetail): ReplacementMap {
       (starter) =>
         !replacedStarterIds.has(starter.athleteId) &&
         starter.entered &&
-        normalizePosition(starter.positionName) === normalizePosition(luxuryReserve.positionName)
+        normalizePosition(starter.positionName) ===
+          normalizePosition(luxuryReserve.positionName)
     );
 
     const lowestStarter = [...candidates].sort(
       (left, right) => (left.points ?? 0) - (right.points ?? 0)
     )[0];
 
-    if (lowestStarter && (luxuryReserve.points ?? 0) > (lowestStarter.points ?? 0)) {
+    if (
+      lowestStarter &&
+      (luxuryReserve.points ?? 0) > (lowestStarter.points ?? 0)
+    ) {
       starterToReserve.set(lowestStarter.athleteId, luxuryReserve);
       reserveToStarter.set(luxuryReserve.athleteId, lowestStarter);
     }
@@ -320,11 +339,19 @@ function buildFieldGroups(starters: PublicLineupPlayer[]) {
       : [...fullBacks, ...centerBacks];
 
   return {
-    attack: starters.filter((player) => normalizePosition(player.positionName) === "ATA"),
-    midfield: starters.filter((player) => normalizePosition(player.positionName) === "MEI"),
+    attack: starters.filter(
+      (player) => normalizePosition(player.positionName) === "ATA"
+    ),
+    midfield: starters.filter(
+      (player) => normalizePosition(player.positionName) === "MEI"
+    ),
     defense,
-    goalkeeper: starters.filter((player) => normalizePosition(player.positionName) === "GOL"),
-    coach: starters.filter((player) => normalizePosition(player.positionName) === "TEC")
+    goalkeeper: starters.filter(
+      (player) => normalizePosition(player.positionName) === "GOL"
+    ),
+    coach: starters.filter(
+      (player) => normalizePosition(player.positionName) === "TEC"
+    )
   };
 }
 
@@ -364,7 +391,11 @@ function PlayerAvatar({
 
 function LuxuryMarkerIcon() {
   return (
-    <svg viewBox="0 0 20 20" aria-hidden="true" className="team-detail-marker__icon">
+    <svg
+      viewBox="0 0 20 20"
+      aria-hidden="true"
+      className="team-detail-marker__icon"
+    >
       <path
         d="M5.2 5.1h4.2v1.8H8.1l2.9 2.9-1.3 1.3-2.9-2.9v1.3H5.2V5.1Zm9.6 9.8h-4.2v-1.8h1.3L9 10.2l1.3-1.3 2.9 2.9v-1.3h1.6v4.4Z"
         fill="currentColor"
@@ -375,7 +406,11 @@ function LuxuryMarkerIcon() {
 
 function ArrowUpMarkerIcon() {
   return (
-    <svg viewBox="0 0 16 16" aria-hidden="true" className="team-detail-marker__icon">
+    <svg
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      className="team-detail-marker__icon"
+    >
       <path d="M8 3.1 13 8H9.7v4.9H6.3V8H3l5-4.9Z" fill="currentColor" />
     </svg>
   );
@@ -383,7 +418,11 @@ function ArrowUpMarkerIcon() {
 
 function ArrowDownMarkerIcon() {
   return (
-    <svg viewBox="0 0 16 16" aria-hidden="true" className="team-detail-marker__icon">
+    <svg
+      viewBox="0 0 16 16"
+      aria-hidden="true"
+      className="team-detail-marker__icon"
+    >
       <path d="M8 12.9 3 8h3.3V3.1h3.4V8H13l-5 4.9Z" fill="currentColor" />
     </svg>
   );
@@ -421,7 +460,10 @@ function TacticalPlayer({
       <div className="team-detail-avatar-ring">
         <PlayerAvatar player={player} className="team-detail-avatar-face" />
         {isCaptain ? (
-          <span className="team-detail-marker team-detail-marker--captain" aria-label="Capitão">
+          <span
+            className="team-detail-marker team-detail-marker--captain"
+            aria-label="Capitão"
+          >
             C
           </span>
         ) : null}
@@ -434,22 +476,32 @@ function TacticalPlayer({
           </span>
         ) : null}
         {reserveIn ? (
-          <span className="team-detail-marker team-detail-marker--up" aria-label="Entrou">
+          <span
+            className="team-detail-marker team-detail-marker--up"
+            aria-label="Entrou"
+          >
             <ArrowUpMarkerIcon />
           </span>
         ) : null}
         {reserveOut ? (
-          <span className="team-detail-marker team-detail-marker--down" aria-label="Saiu">
+          <span
+            className="team-detail-marker team-detail-marker--down"
+            aria-label="Saiu"
+          >
             <ArrowDownMarkerIcon />
           </span>
         ) : null}
       </div>
-      <div className="team-detail-name-plate">{getPlayerLabel(player.playerName)}</div>
+      <div className="team-detail-name-plate">
+        {getPlayerLabel(player.playerName)}
+      </div>
       <div
         className={[
           "team-detail-point-pill",
           waiting ? "team-detail-point-pill--pending" : "",
-          player.points !== null && player.points < 0 ? "team-detail-point-pill--negative" : ""
+          player.points !== null && player.points < 0
+            ? "team-detail-point-pill--negative"
+            : ""
         ]
           .filter(Boolean)
           .join(" ")}
@@ -461,12 +513,35 @@ function TacticalPlayer({
 }
 
 export function TeamDetailView({ detail, view }: Props) {
-  const orderedStarters = useMemo(() => sortMainPlayers(detail.starters), [detail.starters]);
-  const orderedReserves = useMemo(() => sortReservePlayers(detail.reserves), [detail.reserves]);
-  const formationLabel = useMemo(() => formatFormation(detail.starters), [detail.starters]);
-  const formationLayout = useMemo(() => getFormationLayout(formationLabel), [formationLabel]);
+  const orderedStarters = useMemo(
+    () => sortMainPlayers(detail.starters),
+    [detail.starters]
+  );
+  const orderedReserves = useMemo(
+    () => sortReservePlayers(detail.reserves),
+    [detail.reserves]
+  );
+  const formationLabel = useMemo(
+    () => formatFormation(detail.starters),
+    [detail.starters]
+  );
+  const formationLayout = useMemo(
+    () => getFormationLayout(formationLabel),
+    [formationLabel]
+  );
   const replacements = useMemo(() => buildReplacementMap(detail), [detail]);
-  const fieldGroups = useMemo(() => buildFieldGroups(detail.starters), [detail.starters]);
+  const displayedStarters = useMemo(
+    () =>
+      orderedStarters.map(
+        (starter) =>
+          replacements.starterToReserve.get(starter.athleteId) ?? starter
+      ),
+    [orderedStarters, replacements]
+  );
+  const fieldGroups = useMemo(
+    () => buildFieldGroups(detail.starters),
+    [detail.starters]
+  );
   const hasMainLineup = orderedStarters.length > 0;
   const teamHeading = detail.cartolaTeamName?.trim() || detail.country;
   const teamMeta = [detail.country, detail.owner].filter(Boolean).join(" • ");
@@ -482,7 +557,9 @@ export function TeamDetailView({ detail, view }: Props) {
           key={`${player.source}-${player.athleteId}`}
           className={[
             "team-detail-row",
-            player.counted ? "team-detail-row--counting" : "team-detail-row--inactive"
+            player.counted
+              ? "team-detail-row--counting"
+              : "team-detail-row--inactive"
           ]
             .filter(Boolean)
             .join(" ")}
@@ -494,14 +571,17 @@ export function TeamDetailView({ detail, view }: Props) {
               {player.athleteId === detail.captainId ? " (C)" : ""}
             </div>
             <span className="team-detail-row__meta">
-              {player.clubName} • {buildStatusText(player, detail, replacements)}
+              {player.clubName} •{" "}
+              {buildStatusText(player, detail, replacements)}
             </span>
           </div>
           <div
             className={[
               "team-detail-row__pts",
               isWaitingForMatch(player) ? "team-detail-row__pts--pending" : "",
-              player.points !== null && player.points < 0 ? "team-detail-row__pts--negative" : ""
+              player.points !== null && player.points < 0
+                ? "team-detail-row__pts--negative"
+                : ""
             ]
               .filter(Boolean)
               .join(" ")}
@@ -530,7 +610,11 @@ export function TeamDetailView({ detail, view }: Props) {
       return (
         <div
           key={`slot-${starter.athleteId}`}
-          className={slotClassName ? `team-detail-player-slot ${slotClassName}` : "team-detail-player-slot"}
+          className={
+            slotClassName
+              ? `team-detail-player-slot ${slotClassName}`
+              : "team-detail-player-slot"
+          }
           style={{ left: `${slot.x}%`, top: `${slot.y}%` }}
         >
           <TacticalPlayer
@@ -538,7 +622,7 @@ export function TeamDetailView({ detail, view }: Props) {
             inactive={!reserve && !starter.counted && starter.matchStarted}
             waiting={!reserve && isWaitingForMatch(starter)}
             reserveIn={Boolean(reserve)}
-            reserveOut={Boolean(reserve)}
+            reserveOut={false}
             isCaptain={shown.athleteId === detail.captainId}
             isLuxury={shown.athleteId === detail.reserveLuxuryId}
           />
@@ -549,52 +633,83 @@ export function TeamDetailView({ detail, view }: Props) {
   const renderBenchList = () => {
     if (detail.reserves.length === 0) {
       return (
-        <div className="team-detail-info-box">A API oficial não retornou reservas para esta rodada.</div>
+        <div className="team-detail-info-box">
+          A API oficial não retornou reservas para esta rodada.
+        </div>
       );
     }
 
     return (
       <div className="team-detail-bench">
-        {orderedReserves.map((reserve) => (
-          <article
-            key={`reserve-${reserve.athleteId}`}
-            className={[
-              "team-detail-bench__item",
-              reserve.counted ? "team-detail-bench__item--counting" : ""
-            ]
-              .filter(Boolean)
-              .join(" ")}
-          >
-            <div className="team-detail-bench__avatar-wrap">
-              <PlayerAvatar player={reserve} className="team-detail-bench__avatar" />
-              {reserve.athleteId === detail.reserveLuxuryId ? (
-                <span className="team-detail-chip team-detail-chip--luxury" aria-label="Reserva de luxo">
-                  <LuxuryMarkerIcon />
-                </span>
-              ) : null}
-            </div>
-            <div>
-              <div className="team-detail-bench__name">{getPlayerLabel(reserve.playerName)}</div>
-              <span className="team-detail-bench__meta">
-                {normalizePosition(reserve.positionName)} • {reserve.clubName} •{" "}
-                {buildStatusText(reserve, detail, replacements)}
-              </span>
-            </div>
-            <div
+        {orderedReserves.map((reserveSlot) => {
+          const starter = replacements.reserveToStarter.get(
+            reserveSlot.athleteId
+          );
+          const reserve = starter ?? reserveSlot;
+          const shown = reserve;
+          const reserveOut = Boolean(starter);
+
+          return (
+            <article
+              key={`reserve-${reserve.athleteId}`}
               className={[
-                "team-detail-bench__score",
-                isWaitingForMatch(reserve) ? "team-detail-bench__score--pending" : "",
-                reserve.points !== null && reserve.points < 0
-                  ? "team-detail-bench__score--negative"
+                "team-detail-bench__item",
+                !reserveOut && reserve.counted
+                  ? "team-detail-bench__item--counting"
                   : ""
               ]
                 .filter(Boolean)
                 .join(" ")}
             >
-              {formatDisplayPoints(reserve)}
-            </div>
-          </article>
-        ))}
+              <div className="team-detail-bench__avatar-wrap">
+                <PlayerAvatar
+                  player={shown}
+                  className="team-detail-bench__avatar"
+                />
+                {!reserveOut && reserve.athleteId === detail.reserveLuxuryId ? (
+                  <span
+                    className="team-detail-chip team-detail-chip--luxury"
+                    aria-label="Reserva de luxo"
+                  >
+                    <LuxuryMarkerIcon />
+                  </span>
+                ) : null}
+                {reserveOut ? (
+                  <span
+                    className="team-detail-chip team-detail-chip--out"
+                    aria-label="Saiu"
+                  >
+                    <ArrowDownMarkerIcon />
+                  </span>
+                ) : null}
+              </div>
+              <div>
+                <div className="team-detail-bench__name">
+                  {getPlayerLabel(shown.playerName)}
+                </div>
+                <span className="team-detail-bench__meta">
+                  {normalizePosition(reserve.positionName)} • {reserve.clubName}{" "}
+                  • {buildStatusText(shown, detail, replacements)}
+                </span>
+              </div>
+              <div
+                className={[
+                  "team-detail-bench__score",
+                  isWaitingForMatch(shown)
+                    ? "team-detail-bench__score--pending"
+                    : "",
+                  shown.points !== null && shown.points < 0
+                    ? "team-detail-bench__score--negative"
+                    : ""
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+              >
+                {formatDisplayPoints(shown)}
+              </div>
+            </article>
+          );
+        })}
       </div>
     );
   };
@@ -605,51 +720,107 @@ export function TeamDetailView({ detail, view }: Props) {
     }
 
     return (
-      <section className="team-detail-pitch-bench-wrap" aria-label="Reservas desta rodada">
+      <section
+        className="team-detail-pitch-bench-wrap"
+        aria-label="Reservas desta rodada"
+      >
         <div className="team-detail-pitch-bench__header">
           <h3 className="team-detail-subtitle">Reservas</h3>
         </div>
         <div className="team-detail-pitch-bench">
-          {orderedReserves.map((reserve) => (
-            <article
-              key={`pitch-reserve-${reserve.athleteId}`}
-              className={[
-                "team-detail-pitch-bench__item",
-                reserve.counted ? "team-detail-pitch-bench__item--counting" : ""
-              ]
-                .filter(Boolean)
-                .join(" ")}
-            >
-              <div className="team-detail-pitch-bench__avatar-wrap">
-                <PlayerAvatar player={reserve} className="team-detail-pitch-bench__avatar" />
-                {reserve.athleteId === detail.reserveLuxuryId ? (
-                  <span className="team-detail-chip team-detail-chip--luxury" aria-label="Reserva de luxo">
-                    <LuxuryMarkerIcon />
-                  </span>
-                ) : null}
-              </div>
-              <div className="team-detail-pitch-bench__name">{getPlayerLabel(reserve.playerName)}</div>
-              <div
+          {orderedReserves.map((reserveSlot) => {
+            const starter = replacements.reserveToStarter.get(
+              reserveSlot.athleteId
+            );
+            const reserve = starter ?? reserveSlot;
+            const shown = reserve;
+            const reserveOut = Boolean(starter);
+
+            return (
+              <article
+                key={`pitch-reserve-${reserve.athleteId}`}
                 className={[
-                  "team-detail-pitch-bench__score",
-                  isWaitingForMatch(reserve) ? "team-detail-pitch-bench__score--pending" : "",
-                  reserve.points !== null && reserve.points < 0
-                    ? "team-detail-pitch-bench__score--negative"
+                  "team-detail-pitch-bench__item",
+                  !reserveOut && reserve.counted
+                    ? "team-detail-pitch-bench__item--counting"
                     : ""
                 ]
                   .filter(Boolean)
                   .join(" ")}
               >
-                {formatDisplayPoints(reserve)}
-              </div>
-            </article>
-          ))}
+                <div className="team-detail-pitch-bench__avatar-wrap">
+                  <PlayerAvatar
+                    player={shown}
+                    className="team-detail-pitch-bench__avatar"
+                  />
+                  {!reserveOut &&
+                  reserve.athleteId === detail.reserveLuxuryId ? (
+                    <span
+                      className="team-detail-chip team-detail-chip--luxury"
+                      aria-label="Reserva de luxo"
+                    >
+                      <LuxuryMarkerIcon />
+                    </span>
+                  ) : null}
+                  {reserveOut ? (
+                    <span
+                      className="team-detail-chip team-detail-chip--out"
+                      aria-label="Saiu"
+                    >
+                      <ArrowDownMarkerIcon />
+                    </span>
+                  ) : null}
+                </div>
+                <div className="team-detail-pitch-bench__name">
+                  {getPlayerLabel(shown.playerName)}
+                </div>
+                <div
+                  className={[
+                    "team-detail-pitch-bench__score",
+                    isWaitingForMatch(shown)
+                      ? "team-detail-pitch-bench__score--pending"
+                      : "",
+                    shown.points !== null && shown.points < 0
+                      ? "team-detail-pitch-bench__score--negative"
+                      : ""
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                >
+                  {formatDisplayPoints(shown)}
+                </div>
+              </article>
+            );
+          })}
         </div>
-        <div className="team-detail-marker-legend" aria-label="Legenda dos marcadores">
-          <span><strong className="team-detail-marker-legend__token team-detail-marker-legend__token--captain">C</strong> Capitão</span>
-          <span><strong className="team-detail-marker-legend__token team-detail-marker-legend__token--luxury"><LuxuryMarkerIcon /></strong> Reserva de luxo</span>
-          <span><strong className="team-detail-marker-legend__token team-detail-marker-legend__token--up"><ArrowUpMarkerIcon /></strong> Entrou</span>
-          <span><strong className="team-detail-marker-legend__token team-detail-marker-legend__token--down"><ArrowDownMarkerIcon /></strong> Saiu</span>
+        <div
+          className="team-detail-marker-legend"
+          aria-label="Legenda dos marcadores"
+        >
+          <span>
+            <strong className="team-detail-marker-legend__token team-detail-marker-legend__token--captain">
+              C
+            </strong>{" "}
+            Capitão
+          </span>
+          <span>
+            <strong className="team-detail-marker-legend__token team-detail-marker-legend__token--luxury">
+              <LuxuryMarkerIcon />
+            </strong>{" "}
+            Reserva de luxo
+          </span>
+          <span>
+            <strong className="team-detail-marker-legend__token team-detail-marker-legend__token--up">
+              <ArrowUpMarkerIcon />
+            </strong>{" "}
+            Entrou
+          </span>
+          <span>
+            <strong className="team-detail-marker-legend__token team-detail-marker-legend__token--down">
+              <ArrowDownMarkerIcon />
+            </strong>{" "}
+            Saiu
+          </span>
         </div>
       </section>
     );
@@ -661,10 +832,15 @@ export function TeamDetailView({ detail, view }: Props) {
         <div className="public-detail-hero__top">
           <div>
             <div className="public-detail-hero__identity">
-              <FlagBadge country={detail.country} className="flag-badge--hero" />
+              <FlagBadge
+                country={detail.country}
+                className="flag-badge--hero"
+              />
               <div className="team-detail-controls__top">
                 <h1 className="team-detail-controls__title">{teamHeading}</h1>
-                {teamMeta ? <p className="muted team-detail-controls__meta">{teamMeta}</p> : null}
+                {teamMeta ? (
+                  <p className="muted team-detail-controls__meta">{teamMeta}</p>
+                ) : null}
               </div>
             </div>
           </div>
@@ -675,7 +851,9 @@ export function TeamDetailView({ detail, view }: Props) {
         <div className="public-detail-hero__stats public-detail-hero__stats--compact">
           <div className="public-kpi">
             <span className="public-kpi__label">Rodada</span>
-            <strong>{detail.roundLabel.replace(/(\d+)a rodada/, "$1ª rodada")}</strong>
+            <strong>
+              {detail.roundLabel.replace(/(\d+)a rodada/, "$1ª rodada")}
+            </strong>
           </div>
           <div className="public-kpi">
             <span className="public-kpi__label">Pontuação total</span>
@@ -683,7 +861,11 @@ export function TeamDetailView({ detail, view }: Props) {
           </div>
         </div>
         <div className="team-detail-controls__bar">
-          <div className="team-detail-toggle" role="tablist" aria-label="Modo de visualização">
+          <div
+            className="team-detail-toggle"
+            role="tablist"
+            aria-label="Modo de visualização"
+          >
             <Link
               href={fieldHref}
               className={view === "field" ? "is-active" : ""}
@@ -702,7 +884,9 @@ export function TeamDetailView({ detail, view }: Props) {
         </div>
       </article>
 
-      <div className={`team-detail-grid${view === "list" ? " team-detail-grid--list" : ""}`}>
+      <div
+        className={`team-detail-grid${view === "list" ? " team-detail-grid--list" : ""}`}
+      >
         {view === "field" ? (
           <article className="card public-home__panel team-detail-panel">
             <div className="team-detail-panel__head">
@@ -726,16 +910,24 @@ export function TeamDetailView({ detail, view }: Props) {
                 <div className="team-detail-pitch__field-line team-detail-pitch__field-line--goal-bottom" />
 
                 {renderFieldGroup(fieldGroups.attack, formationLayout.attack)}
-                {renderFieldGroup(fieldGroups.midfield, formationLayout.midfield)}
+                {renderFieldGroup(
+                  fieldGroups.midfield,
+                  formationLayout.midfield
+                )}
                 {renderFieldGroup(fieldGroups.defense, formationLayout.defense)}
-                {renderFieldGroup(fieldGroups.goalkeeper, formationLayout.goalkeeper)}
+                {renderFieldGroup(
+                  fieldGroups.goalkeeper,
+                  formationLayout.goalkeeper
+                )}
                 {renderFieldGroup(
                   fieldGroups.coach,
                   formationLayout.coach,
                   "team-detail-player-slot--coach"
                 )}
 
-                <div className="team-detail-pitch__formation-mark">{formationLabel}</div>
+                <div className="team-detail-pitch__formation-mark">
+                  {formationLabel}
+                </div>
               </div>
             )}
 
@@ -747,14 +939,19 @@ export function TeamDetailView({ detail, view }: Props) {
           <div className="team-detail-panel__head">
             <div>
               <h2 className="card__title">Time Principal</h2>
-              {view === "list" ? <p className="muted">Formação {formationLabel}</p> : null}
+              {view === "list" ? (
+                <p className="muted">Formação {formationLabel}</p>
+              ) : null}
             </div>
           </div>
           {hasMainLineup ? (
-            <div className="team-detail-list">{renderMainRows(orderedStarters)}</div>
+            <div className="team-detail-list">
+              {renderMainRows(displayedStarters)}
+            </div>
           ) : (
             <div className="team-detail-info-box">
-              A lista principal será exibida assim que a API retornar os atletas da rodada.
+              A lista principal será exibida assim que a API retornar os atletas
+              da rodada.
             </div>
           )}
         </article>

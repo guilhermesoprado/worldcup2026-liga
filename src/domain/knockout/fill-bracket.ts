@@ -1,5 +1,6 @@
 import {
   roundOf32Matrix,
+  roundOf16Matrix,
   type BracketSeed,
   type DirectSeed,
   type ThirdSeedSlot
@@ -30,6 +31,23 @@ export type FilledRoundOf32Match = {
   awaySeedLabel: string;
 };
 
+export type KnockoutSourceMatch = {
+  phaseSlot: string;
+  state: string;
+  resultType: string | null;
+  homeParticipantId: string;
+  awayParticipantId: string;
+};
+
+export type FilledRoundOf16Match = {
+  phaseSlot: string;
+  gameNumber: number;
+  homeParticipantId: string;
+  awayParticipantId: string;
+  homeSourceSlot: string;
+  awaySourceSlot: string;
+};
+
 export function fillBracket(qualifiedTeams: QualifiedTeam[]) {
   const index = new Map(qualifiedTeams.map((team) => [team.seedLabel, team]));
 
@@ -38,6 +56,52 @@ export function fillBracket(qualifiedTeams: QualifiedTeam[]) {
     homeParticipantId: typeof slot.homeSeed === "string" ? index.get(slot.homeSeed)?.participantId ?? null : null,
     awayParticipantId: typeof slot.awaySeed === "string" ? index.get(slot.awaySeed)?.participantId ?? null : null
   }));
+}
+
+export function buildRoundOf16Matches(sourceMatches: KnockoutSourceMatch[]): FilledRoundOf16Match[] {
+  const winnersByGameNumber = new Map<number, { participantId: string; phaseSlot: string }>();
+
+  for (const match of sourceMatches) {
+    const gameNumber = extractGameNumber(match.phaseSlot);
+
+    if (gameNumber === null) {
+      continue;
+    }
+
+    if (match.state !== "official") {
+      throw new Error("Todos os confrontos da segunda fase precisam estar oficializados.");
+    }
+
+    if (match.resultType !== "home_win" && match.resultType !== "away_win") {
+      throw new Error(`Confronto ${match.phaseSlot} ainda nao possui vencedor de mata-mata.`);
+    }
+
+    winnersByGameNumber.set(gameNumber, {
+      phaseSlot: match.phaseSlot,
+      participantId:
+        match.resultType === "home_win" ? match.homeParticipantId : match.awayParticipantId
+    });
+  }
+
+  return roundOf16Matrix.map((slot) => {
+    const home = winnersByGameNumber.get(slot.homeSourceGameNumber);
+    const away = winnersByGameNumber.get(slot.awaySourceGameNumber);
+
+    if (!home || !away) {
+      throw new Error(
+        `Nao foi possivel encontrar vencedores dos jogos ${slot.homeSourceGameNumber} e ${slot.awaySourceGameNumber}.`
+      );
+    }
+
+    return {
+      phaseSlot: slot.phaseSlot,
+      gameNumber: slot.gameNumber,
+      homeParticipantId: home.participantId,
+      awayParticipantId: away.participantId,
+      homeSourceSlot: home.phaseSlot,
+      awaySourceSlot: away.phaseSlot
+    };
+  });
 }
 
 export function buildRoundOf32Matches(
@@ -214,4 +278,10 @@ function shuffle<T>(items: T[], random: () => number) {
   }
 
   return copy;
+}
+
+function extractGameNumber(phaseSlot: string) {
+  const match = phaseSlot.match(/-(\d+)$/);
+
+  return match ? Number(match[1]) : null;
 }

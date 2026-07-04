@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { roundOf32Matrix } from "@/domain/knockout/bracket-matrix";
-import { buildRoundOf32Matches, type KnockoutStanding } from "@/domain/knockout/fill-bracket";
+import {
+  buildRoundOf16Matches,
+  buildRoundOf32Matches,
+  type KnockoutStanding
+} from "@/domain/knockout/fill-bracket";
 
 const groupCodes = "ABCDEFGHIJKL".split("");
 
@@ -50,5 +54,52 @@ describe("buildRoundOf32Matches", () => {
 
       expect(slot.awaySeed.eligibleGroups).toContain(assignedGroup);
     }
+  });
+});
+
+describe("buildRoundOf16Matches", () => {
+  const officialRoundOf32 = Array.from({ length: 16 }, (_, index) => {
+    const gameNumber = 73 + index;
+
+    return {
+      phaseSlot: `R32-${gameNumber}`,
+      state: "official",
+      resultType: gameNumber % 2 === 0 ? "away_win" : "home_win",
+      homeParticipantId: `home-${gameNumber}`,
+      awayParticipantId: `away-${gameNumber}`
+    };
+  });
+
+  it("crosses round-of-32 winners according to the World Cup round-of-16 bracket", () => {
+    const matches = buildRoundOf16Matches(officialRoundOf32);
+
+    expect(matches[0]).toMatchObject({
+      phaseSlot: "R16-89",
+      homeParticipantId: "away-74",
+      awayParticipantId: "home-77",
+      homeSourceSlot: "R32-74",
+      awaySourceSlot: "R32-77"
+    });
+    expect(matches[1]).toMatchObject({
+      phaseSlot: "R16-90",
+      homeParticipantId: "home-73",
+      awayParticipantId: "home-75"
+    });
+    expect(matches[7]).toMatchObject({
+      phaseSlot: "R16-96",
+      homeParticipantId: "home-85",
+      awayParticipantId: "home-87"
+    });
+  });
+
+  it("does not build round-of-16 matches from non-official source matches", () => {
+    expect(() =>
+      buildRoundOf16Matches([
+        {
+          ...officialRoundOf32[0]!,
+          state: "partial"
+        }
+      ])
+    ).toThrow("oficializados");
   });
 });

@@ -86,11 +86,18 @@ export default async function AdminDashboardPage() {
                 </span>
               </div>
               <span className="badge">
-                {secondPhaseStatus.generatedMatches > 0 ? "gerada" : "pendente"}
+                {secondPhaseStatus.roundOf16GeneratedMatches > 0
+                  ? "oitavas geradas"
+                  : secondPhaseStatus.generatedMatches > 0
+                    ? "segunda fase gerada"
+                    : "pendente"}
               </span>
             </div>
 
-            <AdminSecondPhaseControls generatedMatches={secondPhaseStatus.generatedMatches} />
+            <AdminSecondPhaseControls
+              generatedMatches={secondPhaseStatus.generatedMatches}
+              roundOf16GeneratedMatches={secondPhaseStatus.roundOf16GeneratedMatches}
+            />
           </article>
 
           <article className="card">

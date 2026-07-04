@@ -1,4 +1,4 @@
-import { buildRoundOf32Matches } from "@/domain/knockout/fill-bracket";
+import { buildRoundOf16Matches, buildRoundOf32Matches } from "@/domain/knockout/fill-bracket";
 import { HttpError } from "@/lib/utils/http";
 import { GroupRepository } from "@/server/repositories/group.repository";
 import { MatchRepository } from "@/server/repositories/match.repository";
@@ -7,6 +7,8 @@ import { StandingsSnapshotRepository } from "@/server/repositories/standings-sna
 
 const ROUND_OF_32_PHASE = "round_of_32";
 const ROUND_OF_32_EXTERNAL_ROUND_ID = 4;
+const ROUND_OF_16_PHASE = "round_of_16";
+const ROUND_OF_16_EXTERNAL_ROUND_ID = 5;
 
 export class SecondPhaseService {
   private readonly groupRepository = new GroupRepository();
@@ -16,7 +18,8 @@ export class SecondPhaseService {
 
   async getStatus() {
     return {
-      generatedMatches: await this.matchRepository.countByPhase(ROUND_OF_32_PHASE)
+      generatedMatches: await this.matchRepository.countByPhase(ROUND_OF_32_PHASE),
+      roundOf16GeneratedMatches: await this.matchRepository.countByPhase(ROUND_OF_16_PHASE)
     };
   }
 
@@ -86,6 +89,62 @@ export class SecondPhaseService {
       roundId: generatedRound.id,
       roundName: generatedRound.name,
       sourceRoundName: finalRound.name,
+      generatedMatches: insertedMatches.length
+    };
+  }
+
+  async generateRoundOf16() {
+    const [rounds, matches] = await Promise.all([
+      this.roundRepository.listAll(),
+      this.matchRepository.listAll()
+    ]);
+    const roundOf32Matches = matches.filter((match) => match.phase === ROUND_OF_32_PHASE);
+
+    if (roundOf32Matches.length !== 16) {
+      throw new HttpError(409, "A segunda fase precisa ter 16 confrontos persistidos.");
+    }
+
+    const matchesByRoundId = new Map(rounds.map((round) => [round.id, round]));
+    const generatedMatches = buildRoundOf16Matches(
+      roundOf32Matches.map((match) => ({
+        phaseSlot: match.phase_slot,
+        state: match.state,
+        resultType: match.result_type,
+        homeParticipantId: match.home_participant_id,
+        awayParticipantId: match.away_participant_id
+      }))
+    );
+    const generatedRound =
+      (await this.roundRepository.getByExternalRoundId(ROUND_OF_16_EXTERNAL_ROUND_ID)) ??
+      (await this.roundRepository.upsert({
+        externalRoundId: ROUND_OF_16_EXTERNAL_ROUND_ID,
+        name: "Oitavas de final",
+        status: "scheduled",
+        marketStatus: null
+      }));
+    const insertedMatches = await this.matchRepository.replacePhaseMatches(
+      ROUND_OF_16_PHASE,
+      generatedMatches.map((match) => ({
+        phase: ROUND_OF_16_PHASE,
+        phaseSlot: match.phaseSlot,
+        groupId: null,
+        roundId: generatedRound.id,
+        homeParticipantId: match.homeParticipantId,
+        awayParticipantId: match.awayParticipantId,
+        homePoints: null,
+        awayPoints: null,
+        resultType: null,
+        state: "scheduled",
+        decidedByRule: "score"
+      }))
+    );
+    const sourceRoundName =
+      matchesByRoundId.get(roundOf32Matches[0]?.round_id ?? "")?.name ?? "Segunda fase";
+
+    return {
+      roundId: generatedRound.id,
+      roundName: generatedRound.name,
+      sourceRoundName,
       generatedMatches: insertedMatches.length
     };
   }
