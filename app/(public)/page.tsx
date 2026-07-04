@@ -1,5 +1,5 @@
-import SecondPhasePage from "./segunda-fase/page";
+import RoundOf16Page from "./oitavas-de-final/page";
 
 export const dynamic = "force-dynamic";
 
-export default SecondPhasePage;
+export default RoundOf16Page;
