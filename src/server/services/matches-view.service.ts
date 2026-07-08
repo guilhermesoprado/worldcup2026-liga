@@ -7,23 +7,35 @@ export class MatchesViewService {
   async getMatches(phase?: string | null, roundId?: string | null) {
     const liveSnapshot = await this.publicReadinessService.ensurePublicDataReady();
     const baseMatches = liveSnapshot.matches.length > 0 ? liveSnapshot.matches : publicMatches;
+    const phaseAvailableRounds =
+      phase === "groups"
+        ? liveSnapshot.availableRounds.filter((round) => round <= 3)
+        : liveSnapshot.availableRounds;
+    const defaultRoundNumber =
+      phase === "groups" ? Math.min(liveSnapshot.currentRoundNumber, 3) : liveSnapshot.currentRoundNumber;
     const selectedRoundNumber = this.resolveRoundNumber(
       roundId,
-      liveSnapshot.availableRounds,
-      liveSnapshot.currentRoundNumber
+      phaseAvailableRounds,
+      defaultRoundNumber
     );
     const filteredMatches = baseMatches.filter((match) => {
       const phaseMatches = !phase || match.phase === phase;
       const roundMatches = match.roundNumber === selectedRoundNumber;
       return phaseMatches && roundMatches;
     });
+    const orderedMatches = [...filteredMatches].sort((left, right) => {
+      const leftGroup = left.groupCode ?? "ZZZ";
+      const rightGroup = right.groupCode ?? "ZZZ";
+
+      return leftGroup.localeCompare(rightGroup) || left.id.localeCompare(right.id);
+    });
 
     return {
       phase: phase ?? "groups",
       roundId: String(selectedRoundNumber),
       currentRoundNumber: liveSnapshot.currentRoundNumber,
-      availableRounds: liveSnapshot.availableRounds,
-      matches: filteredMatches,
+      availableRounds: phaseAvailableRounds,
+      matches: orderedMatches,
       usesLiveData: liveSnapshot.usesLiveData
     };
   }

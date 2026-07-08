@@ -83,12 +83,14 @@ export default async function AdminDashboardPage() {
               <div>
                 <h2 className="card__title">Segunda fase</h2>
                 <span className="muted">
-                  Gere os confrontos dos 16 avos com a classificacao final dos grupos
+                  Gere e recupere confrontos do mata-mata quando necessario
                 </span>
               </div>
               <span className="badge">
                 {secondPhaseStatus.roundOf16GeneratedMatches > 0
-                  ? "oitavas geradas"
+                  ? secondPhaseStatus.quarterFinalsGeneratedMatches > 0
+                    ? "quartas geradas"
+                    : "oitavas geradas"
                   : secondPhaseStatus.generatedMatches > 0
                     ? "segunda fase gerada"
                     : "pendente"}
@@ -98,6 +100,7 @@ export default async function AdminDashboardPage() {
             <AdminSecondPhaseControls
               generatedMatches={secondPhaseStatus.generatedMatches}
               roundOf16GeneratedMatches={secondPhaseStatus.roundOf16GeneratedMatches}
+              quarterFinalsGeneratedMatches={secondPhaseStatus.quarterFinalsGeneratedMatches}
             />
           </article>
 

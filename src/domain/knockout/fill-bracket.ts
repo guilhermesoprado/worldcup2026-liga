@@ -1,5 +1,6 @@
 import {
   roundOf32Matrix,
+  quarterFinalMatrix,
   roundOf16Matrix,
   type BracketSeed,
   type DirectSeed,
@@ -48,6 +49,8 @@ export type FilledRoundOf16Match = {
   awaySourceSlot: string;
 };
 
+export type FilledQuarterFinalMatch = FilledRoundOf16Match;
+
 export function fillBracket(qualifiedTeams: QualifiedTeam[]) {
   const index = new Map(qualifiedTeams.map((team) => [team.seedLabel, team]));
 
@@ -59,6 +62,39 @@ export function fillBracket(qualifiedTeams: QualifiedTeam[]) {
 }
 
 export function buildRoundOf16Matches(sourceMatches: KnockoutSourceMatch[]): FilledRoundOf16Match[] {
+  return buildMatchesFromWinners({
+    sourceMatches,
+    matrix: roundOf16Matrix,
+    sourcePhaseLabel: "da segunda fase",
+    targetPhaseLabel: "oitavas"
+  });
+}
+
+export function buildQuarterFinalMatches(sourceMatches: KnockoutSourceMatch[]): FilledQuarterFinalMatch[] {
+  return buildMatchesFromWinners({
+    sourceMatches,
+    matrix: quarterFinalMatrix,
+    sourcePhaseLabel: "das oitavas de final",
+    targetPhaseLabel: "quartas"
+  });
+}
+
+function buildMatchesFromWinners({
+  sourceMatches,
+  matrix,
+  sourcePhaseLabel,
+  targetPhaseLabel
+}: {
+  sourceMatches: KnockoutSourceMatch[];
+  matrix: Array<{
+    phaseSlot: string;
+    gameNumber: number;
+    homeSourceGameNumber: number;
+    awaySourceGameNumber: number;
+  }>;
+  sourcePhaseLabel: string;
+  targetPhaseLabel: string;
+}) {
   const winnersByGameNumber = new Map<number, { participantId: string; phaseSlot: string }>();
 
   for (const match of sourceMatches) {
@@ -69,7 +105,7 @@ export function buildRoundOf16Matches(sourceMatches: KnockoutSourceMatch[]): Fil
     }
 
     if (match.state !== "official") {
-      throw new Error("Todos os confrontos da segunda fase precisam estar oficializados.");
+      throw new Error(`Todos os confrontos ${sourcePhaseLabel} precisam estar oficializados.`);
     }
 
     if (match.resultType !== "home_win" && match.resultType !== "away_win") {
@@ -83,13 +119,13 @@ export function buildRoundOf16Matches(sourceMatches: KnockoutSourceMatch[]): Fil
     });
   }
 
-  return roundOf16Matrix.map((slot) => {
+  return matrix.map((slot) => {
     const home = winnersByGameNumber.get(slot.homeSourceGameNumber);
     const away = winnersByGameNumber.get(slot.awaySourceGameNumber);
 
     if (!home || !away) {
       throw new Error(
-        `Nao foi possivel encontrar vencedores dos jogos ${slot.homeSourceGameNumber} e ${slot.awaySourceGameNumber}.`
+        `Nao foi possivel encontrar vencedores para gerar ${targetPhaseLabel} a partir dos jogos ${slot.homeSourceGameNumber} e ${slot.awaySourceGameNumber}.`
       );
     }
 

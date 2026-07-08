@@ -25,11 +25,8 @@ export default async function MatchesPage({
         <div className="card__header public-home__section-header">
           <div>
             <h1 className="card__title">Confrontos da rodada</h1>
-            <span className="muted">
-              A rodada atual abre por padrao e pode ser filtrada manualmente
-            </span>
           </div>
-          <Link href="/" className="text-link">
+          <Link href="/fase-de-grupos" className="text-link">
             voltar ao painel
           </Link>
         </div>

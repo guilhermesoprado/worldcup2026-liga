@@ -35,6 +35,7 @@ import { RoundRepository, type RoundStatus } from "@/server/repositories/round.r
 import { StandingsSnapshotRepository } from "@/server/repositories/standings-snapshot.repository";
 import { SyncConfigRepository } from "@/server/repositories/sync-config.repository";
 import { SyncExecutionRepository } from "@/server/repositories/sync-execution.repository";
+import { SecondPhaseService } from "@/server/services/second-phase.service";
 
 type SyncTriggerType = "automatic_access" | "manual_admin";
 type SyncMode = "default" | "officialized_only" | "specific_round";
@@ -78,6 +79,8 @@ type ProcessedRound = {
 
 const GROUP_STAGE_ROUNDS = [1, 2, 3] as const;
 const GROUP_PHASE = "groups";
+const QUARTER_FINALS_PHASE = "quarter_finals";
+const QUARTER_FINALS_EXTERNAL_ROUND_ID = 6;
 const GROUP_STAGE_TOTAL_MATCHES = 72;
 const ROUND_PAIRINGS: Record<number, [number, number][]> = {
   1: [
@@ -103,6 +106,7 @@ export class SyncService {
   private readonly standingsSnapshotRepository = new StandingsSnapshotRepository();
   private readonly lineupSnapshotRepository = new LineupSnapshotRepository();
   private readonly mostPickedRepository = new MostPickedRepository();
+  private readonly secondPhaseService = new SecondPhaseService();
 
   async shouldRunAccessDrivenSync() {
     try {
@@ -224,8 +228,8 @@ export class SyncService {
         athletesMarket,
         athletesScored,
         participants,
-        persistedRounds,
-        persistedMatches,
+        initialPersistedRounds,
+        initialPersistedMatches,
         persistedStandings
       ] = await Promise.all([
           cartolaClient.getMarketStatus(),
@@ -237,6 +241,8 @@ export class SyncService {
           this.matchRepository.listAll(),
           this.standingsSnapshotRepository.listAll()
         ]);
+      let persistedRounds = initialPersistedRounds;
+      let persistedMatches = initialPersistedMatches;
 
       const marketState = resolveMarketState(marketStatus);
 
@@ -255,6 +261,23 @@ export class SyncService {
       const athleteCatalog = athletesMarket
         ? mapAthleteCatalog(athletesMarket)
         : new Map();
+
+      if (
+        marketState.apiCurrentRoundNumber >= QUARTER_FINALS_EXTERNAL_ROUND_ID &&
+        !persistedMatches.some((match) => match.phase === QUARTER_FINALS_PHASE)
+      ) {
+        try {
+          await this.secondPhaseService.generateQuarterFinals();
+          [persistedRounds, persistedMatches] = await Promise.all([
+            this.roundRepository.listAll(),
+            this.matchRepository.listAll()
+          ]);
+        } catch {
+          // Quartas are generated opportunistically. If the previous phase is not
+          // fully official yet, the regular sync continues and retries later.
+        }
+      }
+
       const persistedRoundIdToNumberBeforePersist = new Map(
         persistedRounds.map((round) => [round.id, round.external_round_id])
       );

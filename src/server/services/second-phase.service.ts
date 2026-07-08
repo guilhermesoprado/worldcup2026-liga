@@ -1,4 +1,8 @@
-import { buildRoundOf16Matches, buildRoundOf32Matches } from "@/domain/knockout/fill-bracket";
+import {
+  buildQuarterFinalMatches,
+  buildRoundOf16Matches,
+  buildRoundOf32Matches
+} from "@/domain/knockout/fill-bracket";
 import { HttpError } from "@/lib/utils/http";
 import { GroupRepository } from "@/server/repositories/group.repository";
 import { MatchRepository } from "@/server/repositories/match.repository";
@@ -9,6 +13,8 @@ const ROUND_OF_32_PHASE = "round_of_32";
 const ROUND_OF_32_EXTERNAL_ROUND_ID = 4;
 const ROUND_OF_16_PHASE = "round_of_16";
 const ROUND_OF_16_EXTERNAL_ROUND_ID = 5;
+const QUARTER_FINALS_PHASE = "quarter_finals";
+const QUARTER_FINALS_EXTERNAL_ROUND_ID = 6;
 
 export class SecondPhaseService {
   private readonly groupRepository = new GroupRepository();
@@ -19,7 +25,8 @@ export class SecondPhaseService {
   async getStatus() {
     return {
       generatedMatches: await this.matchRepository.countByPhase(ROUND_OF_32_PHASE),
-      roundOf16GeneratedMatches: await this.matchRepository.countByPhase(ROUND_OF_16_PHASE)
+      roundOf16GeneratedMatches: await this.matchRepository.countByPhase(ROUND_OF_16_PHASE),
+      quarterFinalsGeneratedMatches: await this.matchRepository.countByPhase(QUARTER_FINALS_PHASE)
     };
   }
 
@@ -208,6 +215,124 @@ export class SecondPhaseService {
       const message = error instanceof Error ? error.message : "Falha desconhecida.";
       logs.push(`Falha inesperada: ${message}`);
       throw new HttpError(500, `Falha ao gerar oitavas de final: ${message}`, { logs });
+    }
+  }
+
+  async generateQuarterFinals() {
+    const logs: string[] = ["Iniciando geracao das quartas de final."];
+
+    try {
+      logs.push("Carregando rodadas e confrontos persistidos.");
+      const [rounds, matches] = await Promise.all([
+        this.roundRepository.listAll(),
+        this.matchRepository.listAll()
+      ]);
+      const roundOf16Matches = matches.filter((match) => match.phase === ROUND_OF_16_PHASE);
+
+      logs.push(`Encontrados ${roundOf16Matches.length} confrontos de oitavas.`);
+
+      if (roundOf16Matches.length !== 8) {
+        logs.push("Falha: as oitavas precisam ter exatamente 8 confrontos persistidos.");
+        throw new HttpError(409, "As oitavas precisam ter 8 confrontos persistidos.", {
+          logs
+        });
+      }
+
+      const nonOfficialMatches = roundOf16Matches.filter((match) => match.state !== "official");
+      const matchesWithoutWinner = roundOf16Matches.filter(
+        (match) => match.result_type !== "home_win" && match.result_type !== "away_win"
+      );
+
+      logs.push(`${roundOf16Matches.length - nonOfficialMatches.length} confrontos estao oficializados.`);
+
+      if (nonOfficialMatches.length > 0) {
+        logs.push(
+          `Falha: ${nonOfficialMatches.length} confronto(s) ainda nao estao oficializados: ${nonOfficialMatches
+            .map((match) => match.phase_slot)
+            .join(", ")}.`
+        );
+        throw new HttpError(
+          409,
+          "Todos os confrontos das oitavas precisam estar oficializados antes de gerar as quartas.",
+          { logs }
+        );
+      }
+
+      logs.push(`${roundOf16Matches.length - matchesWithoutWinner.length} confrontos possuem vencedor definido.`);
+
+      if (matchesWithoutWinner.length > 0) {
+        logs.push(
+          `Falha: ${matchesWithoutWinner.length} confronto(s) ainda nao possuem vencedor: ${matchesWithoutWinner
+            .map((match) => match.phase_slot)
+            .join(", ")}.`
+        );
+        throw new HttpError(
+          409,
+          "Todos os confrontos das oitavas precisam ter vencedor de mata-mata definido.",
+          { logs }
+        );
+      }
+
+      const matchesByRoundId = new Map(rounds.map((round) => [round.id, round]));
+      logs.push("Montando confrontos das quartas a partir dos vencedores das oitavas.");
+      const generatedMatches = buildQuarterFinalMatches(
+        roundOf16Matches.map((match) => ({
+          phaseSlot: match.phase_slot,
+          state: match.state,
+          resultType: match.result_type,
+          homeParticipantId: match.home_participant_id,
+          awayParticipantId: match.away_participant_id
+        }))
+      );
+
+      logs.push(`Chaveamento montado com ${generatedMatches.length} confrontos de quartas.`);
+      logs.push("Carregando ou criando registro da rodada 6.");
+      const generatedRound =
+        (await this.roundRepository.getByExternalRoundId(QUARTER_FINALS_EXTERNAL_ROUND_ID)) ??
+        (await this.roundRepository.upsert({
+          externalRoundId: QUARTER_FINALS_EXTERNAL_ROUND_ID,
+          name: "Quartas de final",
+          status: "scheduled",
+          marketStatus: null
+        }));
+
+      logs.push("Substituindo confrontos atuais de quartas no banco.");
+      const insertedMatches = await this.matchRepository.replacePhaseMatches(
+        QUARTER_FINALS_PHASE,
+        generatedMatches.map((match) => ({
+          phase: QUARTER_FINALS_PHASE,
+          phaseSlot: match.phaseSlot,
+          groupId: null,
+          roundId: generatedRound.id,
+          homeParticipantId: match.homeParticipantId,
+          awayParticipantId: match.awayParticipantId,
+          homePoints: null,
+          awayPoints: null,
+          resultType: null,
+          state: "scheduled",
+          decidedByRule: "score"
+        }))
+      );
+      const sourceRoundName =
+        matchesByRoundId.get(roundOf16Matches[0]?.round_id ?? "")?.name ?? "Oitavas de final";
+
+      logs.push(`Sucesso: ${insertedMatches.length} confrontos de quartas foram persistidos.`);
+
+      return {
+        roundId: generatedRound.id,
+        roundName: generatedRound.name,
+        sourceRoundName,
+        generatedMatches: insertedMatches.length,
+        logs
+      };
+    } catch (error) {
+      if (error instanceof HttpError) {
+        throw error;
+      }
+
+      const message = error instanceof Error ? error.message : "Falha desconhecida.";
+      logs.push(`Falha inesperada: ${message}`);
+      throw new HttpError(500, `Falha ao gerar quartas de final: ${message}`, { logs });
     }
   }
 }

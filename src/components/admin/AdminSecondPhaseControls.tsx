@@ -5,14 +5,17 @@ import { useState, useTransition } from "react";
 
 export function AdminSecondPhaseControls({
   generatedMatches,
-  roundOf16GeneratedMatches
+  roundOf16GeneratedMatches,
+  quarterFinalsGeneratedMatches
 }: {
   generatedMatches: number;
   roundOf16GeneratedMatches: number;
+  quarterFinalsGeneratedMatches: number;
 }) {
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
   const [roundOf16Logs, setRoundOf16Logs] = useState<string[]>([]);
+  const [quarterFinalsLogs, setQuarterFinalsLogs] = useState<string[]>([]);
   const [isPending, startTransition] = useTransition();
 
   const generateSecondPhase = () => {
@@ -96,6 +99,50 @@ export function AdminSecondPhaseControls({
     });
   };
 
+  const generateQuarterFinals = () => {
+    setMessage(null);
+    setQuarterFinalsLogs([]);
+
+    if (
+      quarterFinalsGeneratedMatches > 0 &&
+      !window.confirm(
+        "As quartas de final ja possuem confrontos gerados. Deseja substituir todos os confrontos atuais?"
+      )
+    ) {
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        const response = await fetch("/api/admin/quarter-finals", {
+          method: "POST"
+        });
+        const body = (await response.json()) as {
+          generatedMatches?: number;
+          sourceRoundName?: string;
+          message?: string;
+          logs?: string[];
+          details?: { logs?: string[] };
+        };
+        const logs = body.logs ?? body.details?.logs ?? [];
+
+        if (!response.ok) {
+          setMessage(body.message ?? "Falha ao gerar quartas de final");
+          setQuarterFinalsLogs(logs);
+          return;
+        }
+
+        setMessage(
+          `${body.generatedMatches ?? 0} confrontos de quartas gerados a partir de ${body.sourceRoundName ?? "oitavas de final"}.`
+        );
+        setQuarterFinalsLogs(logs);
+        router.refresh();
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Falha inesperada.");
+      }
+    });
+  };
+
   return (
     <div className="admin-actions">
       <button
@@ -124,10 +171,32 @@ export function AdminSecondPhaseControls({
           ? `${roundOf16GeneratedMatches} confrontos de oitavas ja persistidos.`
           : "As oitavas serao geradas a partir dos vencedores oficiais da segunda fase."}
       </p>
+      <button
+        type="button"
+        className="admin-button admin-button--ghost"
+        onClick={generateQuarterFinals}
+        disabled={isPending || roundOf16GeneratedMatches < 8}
+      >
+        {isPending ? "gerando..." : "regenerar quartas de final"}
+      </button>
+      <p className="muted">
+        {quarterFinalsGeneratedMatches > 0
+          ? `${quarterFinalsGeneratedMatches} confrontos de quartas ja persistidos.`
+          : "As quartas serao geradas automaticamente quando a rodada 6 estiver disponivel, com fallback manual por aqui."}
+      </p>
       {message ? <p className="muted">{message}</p> : null}
       {roundOf16Logs.length > 0 ? (
         <div className="admin-log">
           {roundOf16Logs.map((log) => (
+            <p className="muted" key={log}>
+              {log}
+            </p>
+          ))}
+        </div>
+      ) : null}
+      {quarterFinalsLogs.length > 0 ? (
+        <div className="admin-log">
+          {quarterFinalsLogs.map((log) => (
             <p className="muted" key={log}>
               {log}
             </p>

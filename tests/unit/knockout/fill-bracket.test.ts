@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { roundOf32Matrix } from "@/domain/knockout/bracket-matrix";
 import {
+  buildQuarterFinalMatches,
   buildRoundOf16Matches,
   buildRoundOf32Matches,
   type KnockoutStanding
@@ -54,6 +55,48 @@ describe("buildRoundOf32Matches", () => {
 
       expect(slot.awaySeed.eligibleGroups).toContain(assignedGroup);
     }
+  });
+});
+
+describe("buildQuarterFinalMatches", () => {
+  const officialRoundOf16 = Array.from({ length: 8 }, (_, index) => {
+    const gameNumber = 89 + index;
+
+    return {
+      phaseSlot: `R16-${gameNumber}`,
+      state: "official",
+      resultType: gameNumber % 2 === 0 ? "away_win" : "home_win",
+      homeParticipantId: `home-${gameNumber}`,
+      awayParticipantId: `away-${gameNumber}`
+    };
+  });
+
+  it("crosses round-of-16 winners according to the quarter-finals bracket", () => {
+    const matches = buildQuarterFinalMatches(officialRoundOf16);
+
+    expect(matches[0]).toMatchObject({
+      phaseSlot: "QF-97",
+      homeParticipantId: "home-89",
+      awayParticipantId: "away-90",
+      homeSourceSlot: "R16-89",
+      awaySourceSlot: "R16-90"
+    });
+    expect(matches[3]).toMatchObject({
+      phaseSlot: "QF-100",
+      homeParticipantId: "home-95",
+      awayParticipantId: "away-96"
+    });
+  });
+
+  it("does not build quarter-finals matches from non-official source matches", () => {
+    expect(() =>
+      buildQuarterFinalMatches([
+        {
+          ...officialRoundOf16[0]!,
+          state: "partial"
+        }
+      ])
+    ).toThrow("oficializados");
   });
 });
 

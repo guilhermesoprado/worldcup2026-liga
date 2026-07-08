@@ -1,0 +1,178 @@
+[1mdiff --git a/app/(public)/classificacao-geral/page.tsx b/app/(public)/classificacao-geral/page.tsx[m
+[1mindex 9d8c5d3..88b97af 100644[m
+[1m--- a/app/(public)/classificacao-geral/page.tsx[m
+[1m+++ b/app/(public)/classificacao-geral/page.tsx[m
+[36m@@ -169,12 +169,7 @@[m [mexport default async function OverallClassificationPage({[m
+         <div className="hero__content">[m
+           <div className="overall-classification__hero-top">[m
+             <div>[m
+[31m-              <span className="hero__eyebrow">Classificação geral projetada</span>[m
+               <h1>Classificação geral</h1>[m
+[31m-              <p className="overall-classification__hero-copy">[m
+[31m-                A leitura considera os 1ºs e 2ºs de cada grupo como classificados automáticos.[m
+[31m-                Depois disso, entram os 8 melhores 3ºs por pontos, vitórias, saldo de pontos e pontos pró.[m
+[31m-              </p>[m
+             </div>[m
+             <Link href="/" className="text-link overall-classification__hero-back">[m
+               voltar ao painel[m
+[1mdiff --git a/app/(public)/fase-de-grupos/page.tsx b/app/(public)/fase-de-grupos/page.tsx[m
+[1mnew file mode 100644[m
+[1mindex 0000000..61c6031[m
+[1m--- /dev/null[m
+[1m+++ b/app/(public)/fase-de-grupos/page.tsx[m
+[36m@@ -0,0 +1,120 @@[m
+[32m+[m[32mimport Link from "next/link";[m
+[32m+[m[32mimport { EmptyState } from "@/components/public/EmptyState";[m
+[32m+[m[32mimport { GroupSelector } from "@/components/public/GroupSelector";[m
+[32m+[m[32mimport { MatchCards } from "@/components/public/MatchCards";[m
+[32m+[m[32mimport { MostPickedList } from "@/components/public/MostPickedList";[m
+[32m+[m[32mimport { PhaseHero } from "@/components/public/PhaseHero";[m
+[32m+[m[32mimport { RoundSelector } from "@/components/public/RoundSelector";[m
+[32m+[m[32mimport { StandingsTable } from "@/components/public/StandingsTable";[m
+[32m+[m[32mimport { PublicOverviewService } from "@/server/services/public-overview.service";[m
+[32m+[m
+[32m+[m[32mexport const dynamic = "force-dynamic";[m
+[32m+[m
+[32m+[m[32mconst overviewService = new PublicOverviewService();[m
+[32m+[m
+[32m+[m[32mfunction formatRoundLabel(roundNumber: number) {[m
+[32m+[m[32m  return `${roundNumber}ª rodada`;[m
+[32m+[m[32m}[m
+[32m+[m
+[32m+[m[32mexport default async function GroupPhasePage({[m
+[32m+[m[32m  searchParams[m
+[32m+[m[32m}: {[m
+[32m+[m[32m  searchParams?: Promise<{ round?: string; group?: string }>;[m
+[32m+[m[32m}) {[m
+[32m+[m[32m  const resolvedSearchParams = searchParams ? await searchParams : undefined;[m
+[32m+[m[32m  const overview = await overviewService.getOverview([m
+[32m+[m[32m    resolvedSearchParams?.round,[m
+[32m+[m[32m    resolvedSearchParams?.group[m
+[32m+[m[32m  );[m
+[32m+[m
+[32m+[m[32m  return ([m
+[32m+[m[32m    <main className="shell public-home">[m
+[32m+[m[32m      <PhaseHero[m
+[32m+[m[32m        title={overview.phaseLabel}[m
+[32m+[m[32m        completedMatches={overview.completedMatches}[m
+[32m+[m[32m        totalMatches={overview.totalMatches}[m
+[32m+[m[32m        nextPhaseLink={{ href: "/segunda-fase", label: "Ir para a segunda fase" }}[m
+[32m+[m[32m      />[m
+[32m+[m
+[32m+[m[32m      <section className="card public-home__group-card">[m
+[32m+[m[32m        <div className="card__header public-home__section-header">[m
+[32m+[m[32m          <div>[m
+[32m+[m[32m            <h2 className="card__title">Selecione o grupo</h2>[m
+[32m+[m[32m            <span className="muted">12 grupos definidos para a fase inicial</span>[m
+[32m+[m[32m          </div>[m
+[32m+[m[32m          <div className="section-actions">[m
+[32m+[m[32m            <Link href={`/confrontos?round=${overview.selectedRoundNumber}`} className="text-link">[m
+[32m+[m[32m              ver todos os confrontos[m
+[32m+[m[32m            </Link>[m
+[32m+[m[32m          </div>[m
+[32m+[m[32m        </div>[m
+[32m+[m[32m        <GroupSelector[m
+[32m+[m[32m          groups={overview.groups}[m
+[32m+[m[32m          activeGroupCode={overview.activeGroupCode}[m
+[32m+[m[32m          selectedRoundNumber={overview.selectedRoundNumber}[m
+[32m+[m[32m        />[m
+[32m+[m[32m      </section>[m
+[32m+[m
+[32m+[m[32m      <section className="public-home__content-grid">[m
+[32m+[m[32m        <article className="card public-home__panel">[m
+[32m+[m[32m          <div className="card__header public-home__section-header">[m
+[32m+[m[32m            <div>[m
+[32m+[m[32m              <h2 className="card__title">Classificação · Grupo {overview.activeGroupCode}</h2>[m
+[32m+[m[32m            </div>[m
+[32m+[m[32m            <Link href="/classificacao-geral" className="text-link">[m
+[32m+[m[32m              ver classificação geral[m
+[32m+[m[32m            </Link>[m
+[32m+[m[32m          </div>[m
+[32m+[m[32m          {overview.activeGroupStandings.length > 0 ? ([m
+[32m+[m[32m            <StandingsTable[m
+[32m+[m[32m              standings={overview.activeGroupStandings}[m
+[32m+[m[32m              roundNumber={overview.standingsRoundNumber}[m
+[32m+[m[32m            />[m
+[32m+[m[32m          ) : ([m
+[32m+[m[32m            <EmptyState[m
+[32m+[m[32m              title="Sem classificação disponível"[m
+[32m+[m[32m              description="A classificação aparecerá quando houver confrontos processados."[m
+[32m+[m[32m            />[m
+[32m+[m[32m          )}[m
+[32m+[m[32m        </article>[m
+[32m+[m
+[32m+[m[32m        <article className="card public-home__panel">[m
+[32m+[m[32m          <div className="card__header public-home__section-header">[m
+[32m+[m[32m            <div>[m
+[32m+[m[32m              <h2 className="card__title">Confrontos · {formatRoundLabel(overview.selectedRoundNumber)}</h2>[m
+[32m+[m[32m            </div>[m
+[32m+[m[32m          </div>[m
+[32m+[m[32m          <RoundSelector[m
+[32m+[m[32m            activeRoundNumber={overview.selectedRoundNumber}[m
+[32m+[m[32m            rounds={overview.availableRounds}[m
+[32m+[m[32m            activeGroupCode={overview.activeGroupCode}[m
+[32m+[m[32m          />[m
+[32m+[m[32m          <div style={{ height: 18 }} />[m
+[32m+[m[32m          <MatchCards matches={overview.currentRoundMatches} />[m
+[32m+[m[32m        </article>[m
+[32m+[m[32m      </section>[m
+[32m+[m
+[32m+[m[32m      <section className="card public-home__panel public-home__panel--wide">[m
+[32m+[m[32m        <div className="card__header public-home__section-header">[m
+[32m+[m[32m          <div>[m
+[32m+[m[32m            <h2 className="card__title">Jogadores mais escalados</h2>[m
+[32m+[m[32m          </div>[m
+[32m+[m[32m          <Link[m
+[32m+[m[32m            href={`/jogadores-mais-escalados?round=${overview.selectedRoundNumber}`}[m
+[32m+[m[32m            className="text-link"[m
+[32m+[m[32m          >[m
+[32m+[m[32m            ranking das rodadas[m
+[32m+[m[32m          </Link>[m
+[32m+[m[32m        </div>[m
+[32m+[m[32m        {overview.mostPickedPlayers.length > 0 ? ([m
+[32m+[m[32m          <MostPickedList players={overview.mostPickedPlayers.slice(0, 7)} />[m
+[32m+[m[32m        ) : ([m
+[32m+[m[32m          <EmptyState[m
+[32m+[m[32m            title="Sem escalações para esta rodada"[m
+[32m+[m[32m            description="O ranking aparece quando a rodada tiver jogadores efetivamente contabilizados pelo Cartola."[m
+[32m+[m[32m          />[m
+[32m+[m[32m        )}[m
+[32m+[m[32m      </section>[m
+[32m+[m[32m    </main>[m
+[32m+[m[32m  );[m
+[32m+[m[32m}[m
+[1mdiff --git a/app/(public)/segunda-fase/page.tsx b/app/(public)/segunda-fase/page.tsx[m
+[1mindex 6565c34..5cbd622 100644[m
+[1m--- a/app/(public)/segunda-fase/page.tsx[m
+[1m+++ b/app/(public)/segunda-fase/page.tsx[m
+[36m@@ -17,8 +17,7 @@[m [mexport default async function SecondPhasePage() {[m
+         title="Segunda Fase"[m
+         completedMatches={secondPhaseMatches.filter((match) => match.state !== "scheduled").length}[m
+         totalMatches={16}[m
+[31m-        showEyebrow={false}[m
+[31m-        showProgress={false}[m
+[32m+[m[32m        previousPhaseLink={{ href: "/fase-de-grupos", label: "Voltar para a fase de grupos" }}[m
+         nextPhaseDisabled[m
+       />[m
+ [m
+[1mdiff --git a/src/components/public/PhaseHero.tsx b/src/components/public/PhaseHero.tsx[m
+[1mindex 402c1a1..383ff15 100644[m
+[1m--- a/src/components/public/PhaseHero.tsx[m
+[1m+++ b/src/components/public/PhaseHero.tsx[m
+[36m@@ -70,7 +70,6 @@[m [mexport function PhaseHero({[m
+   title,[m
+   completedMatches,[m
+   totalMatches,[m
+[31m-  showEyebrow = true,[m
+   showProgress = true,[m
+   previousPhaseLink,[m
+   nextPhaseLink,[m
+[36m@@ -85,8 +84,6 @@[m [mexport function PhaseHero({[m
+       <div className="hero__glow" aria-hidden="true" />[m
+       <div className="hero__content">[m
+         <div className="hero__headline">[m
+[31m-          {showEyebrow ? <span className="hero__eyebrow">Fase atual</span> : null}[m
+[31m-[m
+           <div className="hero__title-row">[m
+             {previousPhaseLink ? ([m
+               <HeroArrow[m

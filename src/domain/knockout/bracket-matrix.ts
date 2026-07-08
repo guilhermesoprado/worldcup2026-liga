@@ -45,6 +45,13 @@ export type RoundOf16Slot = {
   awaySourceGameNumber: number;
 };
 
+export type QuarterFinalSlot = {
+  phaseSlot: string;
+  gameNumber: number;
+  homeSourceGameNumber: number;
+  awaySourceGameNumber: number;
+};
+
 export const roundOf32Matrix: RoundOf32Slot[] = [
   { phaseSlot: "R32-73", gameNumber: 73, homeSeed: "A2", awaySeed: "B2" },
   {
@@ -113,6 +120,13 @@ export const roundOf16Matrix: RoundOf16Slot[] = [
   { phaseSlot: "R16-94", gameNumber: 94, homeSourceGameNumber: 81, awaySourceGameNumber: 82 },
   { phaseSlot: "R16-95", gameNumber: 95, homeSourceGameNumber: 86, awaySourceGameNumber: 88 },
   { phaseSlot: "R16-96", gameNumber: 96, homeSourceGameNumber: 85, awaySourceGameNumber: 87 }
+];
+
+export const quarterFinalMatrix: QuarterFinalSlot[] = [
+  { phaseSlot: "QF-97", gameNumber: 97, homeSourceGameNumber: 89, awaySourceGameNumber: 90 },
+  { phaseSlot: "QF-98", gameNumber: 98, homeSourceGameNumber: 91, awaySourceGameNumber: 92 },
+  { phaseSlot: "QF-99", gameNumber: 99, homeSourceGameNumber: 93, awaySourceGameNumber: 94 },
+  { phaseSlot: "QF-100", gameNumber: 100, homeSourceGameNumber: 95, awaySourceGameNumber: 96 }
 ];
 
 export const bracketMatrix = roundOf32Matrix;

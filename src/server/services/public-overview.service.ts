@@ -7,6 +7,8 @@ export class PublicOverviewService {
   async getOverview(roundId?: string | null, groupId?: string | null) {
     const liveSnapshot = await this.publicReadinessService.ensurePublicDataReady();
     const overview = getCompetitionOverview();
+    const groupPhaseRounds = liveSnapshot.availableRounds.filter((round) => round <= 3);
+    const defaultRoundNumber = Math.min(liveSnapshot.currentRoundNumber, 3);
     const activeGroup = this.resolveActiveGroup(
       groupId,
       liveSnapshot.groups,
@@ -14,8 +16,8 @@ export class PublicOverviewService {
     );
     const selectedRoundNumber = this.resolveRoundNumber(
       roundId,
-      liveSnapshot.availableRounds,
-      liveSnapshot.currentRoundNumber
+      groupPhaseRounds,
+      defaultRoundNumber
     );
 
     return {
@@ -31,7 +33,7 @@ export class PublicOverviewService {
       standingsRoundLabel: liveSnapshot.standingsRoundLabel,
       stateLabel: liveSnapshot.stateLabel,
       groups: liveSnapshot.groups,
-      availableRounds: liveSnapshot.availableRounds,
+      availableRounds: groupPhaseRounds,
       activeGroupCode: activeGroup?.code ?? groups[0]?.code ?? "A",
       activeGroupStandings:
         liveSnapshot.standingsByGroup[activeGroup?.code ?? "A"] ??

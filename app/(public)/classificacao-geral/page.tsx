@@ -171,7 +171,7 @@ export default async function OverallClassificationPage({
             <div>
               <h1>Classificação geral</h1>
             </div>
-            <Link href="/" className="text-link overall-classification__hero-back">
+            <Link href="/fase-de-grupos" className="text-link overall-classification__hero-back">
               voltar ao painel
             </Link>
           </div>
