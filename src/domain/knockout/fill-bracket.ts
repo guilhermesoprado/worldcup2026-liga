@@ -1,7 +1,9 @@
 import {
   roundOf32Matrix,
+  finalMatrix,
   quarterFinalMatrix,
   roundOf16Matrix,
+  semiFinalMatrix,
   type BracketSeed,
   type DirectSeed,
   type ThirdSeedSlot
@@ -51,6 +53,10 @@ export type FilledRoundOf16Match = {
 
 export type FilledQuarterFinalMatch = FilledRoundOf16Match;
 
+export type FilledSemiFinalMatch = FilledRoundOf16Match;
+
+export type FilledFinalMatch = FilledRoundOf16Match;
+
 export function fillBracket(qualifiedTeams: QualifiedTeam[]) {
   const index = new Map(qualifiedTeams.map((team) => [team.seedLabel, team]));
 
@@ -76,6 +82,24 @@ export function buildQuarterFinalMatches(sourceMatches: KnockoutSourceMatch[]): 
     matrix: quarterFinalMatrix,
     sourcePhaseLabel: "das oitavas de final",
     targetPhaseLabel: "quartas"
+  });
+}
+
+export function buildSemiFinalMatches(sourceMatches: KnockoutSourceMatch[]): FilledSemiFinalMatch[] {
+  return buildMatchesFromWinners({
+    sourceMatches,
+    matrix: semiFinalMatrix,
+    sourcePhaseLabel: "das quartas de final",
+    targetPhaseLabel: "semifinais"
+  });
+}
+
+export function buildFinalMatches(sourceMatches: KnockoutSourceMatch[]): FilledFinalMatch[] {
+  return buildMatchesFromWinners({
+    sourceMatches,
+    matrix: finalMatrix,
+    sourcePhaseLabel: "das semifinais",
+    targetPhaseLabel: "final"
   });
 }
 

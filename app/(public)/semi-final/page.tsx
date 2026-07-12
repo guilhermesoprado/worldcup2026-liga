@@ -7,36 +7,31 @@ import { PublicReadinessService } from "@/server/services/public-readiness.servi
 export const dynamic = "force-dynamic";
 
 const publicReadinessService = new PublicReadinessService();
-const QUARTER_FINALS_EXTERNAL_ROUND_ID = 6;
 const SEMI_FINALS_EXTERNAL_ROUND_ID = 7;
+const FINAL_EXTERNAL_ROUND_ID = 8;
 
-export default async function QuarterFinalsPage() {
+export default async function SemiFinalPage() {
   const snapshot = await publicReadinessService.ensurePublicDataReady();
-  const quarterFinalsMatches = snapshot.matches.filter((match) => match.phase === "quarter_finals");
   const semiFinalsMatches = snapshot.matches.filter((match) => match.phase === "semi_finals");
-  const quarterFinalsMostPicked =
-    snapshot.mostPickedByRound[String(QUARTER_FINALS_EXTERNAL_ROUND_ID)] ?? [];
+  const finalMatches = snapshot.matches.filter((match) => match.phase === "final");
+  const semiFinalsMostPicked =
+    snapshot.mostPickedByRound[String(SEMI_FINALS_EXTERNAL_ROUND_ID)] ?? [];
   const shouldShowRound =
-    snapshot.availableRounds.includes(QUARTER_FINALS_EXTERNAL_ROUND_ID) &&
-    quarterFinalsMatches.length > 0;
-  const semiFinalsAvailable =
     snapshot.availableRounds.includes(SEMI_FINALS_EXTERNAL_ROUND_ID) &&
     semiFinalsMatches.length > 0;
-  const visibleMatches = shouldShowRound ? quarterFinalsMatches : [];
+  const finalAvailable =
+    snapshot.availableRounds.includes(FINAL_EXTERNAL_ROUND_ID) && finalMatches.length > 0;
+  const visibleMatches = shouldShowRound ? semiFinalsMatches : [];
 
   return (
     <main className="shell public-home">
       <PhaseHero
-        title="Quartas de Final"
+        title="Semi-final"
         completedMatches={visibleMatches.filter((match) => match.state !== "scheduled").length}
-        totalMatches={4}
-        previousPhaseLink={{ href: "/oitavas-de-final", label: "Voltar para as oitavas de final" }}
-        nextPhaseLink={
-          semiFinalsAvailable
-            ? { href: "/semi-final", label: "Ir para a semi-final" }
-            : undefined
-        }
-        nextPhaseDisabled={!semiFinalsAvailable}
+        totalMatches={2}
+        previousPhaseLink={{ href: "/quartas-de-final", label: "Voltar para as quartas de final" }}
+        nextPhaseLink={finalAvailable ? { href: "/final", label: "Ir para a final" } : undefined}
+        nextPhaseDisabled={!finalAvailable}
       />
 
       <section className="card second-phase-page">
@@ -44,8 +39,8 @@ export default async function QuarterFinalsPage() {
           <MatchCards matches={visibleMatches} showBadge={false} />
         ) : (
           <EmptyState
-            title="Quartas de final ainda indisponiveis"
-            description="Os confrontos aparecem aqui quando a rodada das quartas estiver valendo."
+            title="Semi-final ainda indisponivel"
+            description="Os confrontos aparecem aqui quando a rodada da semi-final estiver valendo."
           />
         )}
       </section>
@@ -56,11 +51,11 @@ export default async function QuarterFinalsPage() {
             <h2 className="card__title">Jogadores mais escalados</h2>
           </div>
         </div>
-        {shouldShowRound && quarterFinalsMostPicked.length > 0 ? (
-          <MostPickedList players={quarterFinalsMostPicked.slice(0, 7)} />
+        {shouldShowRound && semiFinalsMostPicked.length > 0 ? (
+          <MostPickedList players={semiFinalsMostPicked.slice(0, 7)} />
         ) : (
           <EmptyState
-            title="Sem escalacoes para as quartas"
+            title="Sem escalacoes para a semi-final"
             description="O ranking aparece quando a rodada tiver jogadores efetivamente contabilizados pelo Cartola."
           />
         )}

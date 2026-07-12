@@ -52,6 +52,10 @@ export type QuarterFinalSlot = {
   awaySourceGameNumber: number;
 };
 
+export type SemiFinalSlot = QuarterFinalSlot;
+
+export type FinalSlot = QuarterFinalSlot;
+
 export const roundOf32Matrix: RoundOf32Slot[] = [
   { phaseSlot: "R32-73", gameNumber: 73, homeSeed: "A2", awaySeed: "B2" },
   {
@@ -127,6 +131,15 @@ export const quarterFinalMatrix: QuarterFinalSlot[] = [
   { phaseSlot: "QF-98", gameNumber: 98, homeSourceGameNumber: 91, awaySourceGameNumber: 92 },
   { phaseSlot: "QF-99", gameNumber: 99, homeSourceGameNumber: 93, awaySourceGameNumber: 94 },
   { phaseSlot: "QF-100", gameNumber: 100, homeSourceGameNumber: 95, awaySourceGameNumber: 96 }
+];
+
+export const semiFinalMatrix: SemiFinalSlot[] = [
+  { phaseSlot: "SF-101", gameNumber: 101, homeSourceGameNumber: 97, awaySourceGameNumber: 98 },
+  { phaseSlot: "SF-102", gameNumber: 102, homeSourceGameNumber: 99, awaySourceGameNumber: 100 }
+];
+
+export const finalMatrix: FinalSlot[] = [
+  { phaseSlot: "F-103", gameNumber: 103, homeSourceGameNumber: 101, awaySourceGameNumber: 102 }
 ];
 
 export const bracketMatrix = roundOf32Matrix;

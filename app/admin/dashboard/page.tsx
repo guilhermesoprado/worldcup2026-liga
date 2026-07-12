@@ -88,9 +88,13 @@ export default async function AdminDashboardPage() {
               </div>
               <span className="badge">
                 {secondPhaseStatus.roundOf16GeneratedMatches > 0
-                  ? secondPhaseStatus.quarterFinalsGeneratedMatches > 0
-                    ? "quartas geradas"
-                    : "oitavas geradas"
+                  ? secondPhaseStatus.finalGeneratedMatches > 0
+                    ? "final gerada"
+                    : secondPhaseStatus.semiFinalsGeneratedMatches > 0
+                      ? "semifinais geradas"
+                      : secondPhaseStatus.quarterFinalsGeneratedMatches > 0
+                        ? "quartas geradas"
+                        : "oitavas geradas"
                   : secondPhaseStatus.generatedMatches > 0
                     ? "segunda fase gerada"
                     : "pendente"}
@@ -101,6 +105,8 @@ export default async function AdminDashboardPage() {
               generatedMatches={secondPhaseStatus.generatedMatches}
               roundOf16GeneratedMatches={secondPhaseStatus.roundOf16GeneratedMatches}
               quarterFinalsGeneratedMatches={secondPhaseStatus.quarterFinalsGeneratedMatches}
+              semiFinalsGeneratedMatches={secondPhaseStatus.semiFinalsGeneratedMatches}
+              finalGeneratedMatches={secondPhaseStatus.finalGeneratedMatches}
             />
           </article>
 

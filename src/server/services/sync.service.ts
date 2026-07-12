@@ -81,6 +81,12 @@ const GROUP_STAGE_ROUNDS = [1, 2, 3] as const;
 const GROUP_PHASE = "groups";
 const QUARTER_FINALS_PHASE = "quarter_finals";
 const QUARTER_FINALS_EXTERNAL_ROUND_ID = 6;
+const SEMI_FINALS_PHASE = "semi_finals";
+const SEMI_FINALS_EXTERNAL_ROUND_ID = 7;
+const SEMI_FINALS_EXPECTED_MATCHES = 2;
+const FINAL_PHASE = "final";
+const FINAL_EXTERNAL_ROUND_ID = 8;
+const FINAL_EXPECTED_MATCHES = 1;
 const GROUP_STAGE_TOTAL_MATCHES = 72;
 const ROUND_PAIRINGS: Record<number, [number, number][]> = {
   1: [
@@ -275,6 +281,38 @@ export class SyncService {
         } catch {
           // Quartas are generated opportunistically. If the previous phase is not
           // fully official yet, the regular sync continues and retries later.
+        }
+      }
+
+      if (
+        marketState.apiCurrentRoundNumber >= SEMI_FINALS_EXTERNAL_ROUND_ID &&
+        this.countMatchesByPhase(persistedMatches, SEMI_FINALS_PHASE) !== SEMI_FINALS_EXPECTED_MATCHES
+      ) {
+        try {
+          await this.secondPhaseService.generateSemiFinals();
+          [persistedRounds, persistedMatches] = await Promise.all([
+            this.roundRepository.listAll(),
+            this.matchRepository.listAll()
+          ]);
+        } catch {
+          // Semifinals are generated opportunistically. If quarter-finals are not
+          // fully official yet, the regular sync continues and retries later.
+        }
+      }
+
+      if (
+        marketState.apiCurrentRoundNumber >= FINAL_EXTERNAL_ROUND_ID &&
+        this.countMatchesByPhase(persistedMatches, FINAL_PHASE) !== FINAL_EXPECTED_MATCHES
+      ) {
+        try {
+          await this.secondPhaseService.generateFinal();
+          [persistedRounds, persistedMatches] = await Promise.all([
+            this.roundRepository.listAll(),
+            this.matchRepository.listAll()
+          ]);
+        } catch {
+          // Final is generated opportunistically. If semifinals are not fully
+          // official yet, the regular sync continues and retries later.
         }
       }
 
@@ -811,6 +849,13 @@ export class SyncService {
     }
 
     return matchesByRound;
+  }
+
+  private countMatchesByPhase(
+    matches: Awaited<ReturnType<MatchRepository["listAll"]>>,
+    phase: string
+  ) {
+    return matches.filter((match) => match.phase === phase).length;
   }
 
   private resolveKnockoutParticipantsForRound({

@@ -8,13 +8,18 @@ export const dynamic = "force-dynamic";
 
 const publicReadinessService = new PublicReadinessService();
 const ROUND_OF_16_EXTERNAL_ROUND_ID = 5;
+const QUARTER_FINALS_EXTERNAL_ROUND_ID = 6;
 
 export default async function RoundOf16Page() {
   const snapshot = await publicReadinessService.ensurePublicDataReady();
   const roundOf16Matches = snapshot.matches.filter((match) => match.phase === "round_of_16");
+  const quarterFinalsMatches = snapshot.matches.filter((match) => match.phase === "quarter_finals");
   const roundOf16MostPicked = snapshot.mostPickedByRound[String(ROUND_OF_16_EXTERNAL_ROUND_ID)] ?? [];
   const shouldShowRound =
     snapshot.availableRounds.includes(ROUND_OF_16_EXTERNAL_ROUND_ID) && roundOf16Matches.length > 0;
+  const quarterFinalsAvailable =
+    snapshot.availableRounds.includes(QUARTER_FINALS_EXTERNAL_ROUND_ID) &&
+    quarterFinalsMatches.length > 0;
   const visibleMatches = shouldShowRound ? roundOf16Matches : [];
 
   return (
@@ -24,7 +29,12 @@ export default async function RoundOf16Page() {
         completedMatches={visibleMatches.filter((match) => match.state !== "scheduled").length}
         totalMatches={8}
         previousPhaseLink={{ href: "/segunda-fase", label: "Voltar para a segunda fase" }}
-        nextPhaseDisabled
+        nextPhaseLink={
+          quarterFinalsAvailable
+            ? { href: "/quartas-de-final", label: "Ir para as quartas de final" }
+            : undefined
+        }
+        nextPhaseDisabled={!quarterFinalsAvailable}
       />
 
       <section className="card second-phase-page">

@@ -1,7 +1,9 @@
 import {
+  buildFinalMatches,
   buildQuarterFinalMatches,
   buildRoundOf16Matches,
-  buildRoundOf32Matches
+  buildRoundOf32Matches,
+  buildSemiFinalMatches
 } from "@/domain/knockout/fill-bracket";
 import { HttpError } from "@/lib/utils/http";
 import { GroupRepository } from "@/server/repositories/group.repository";
@@ -15,6 +17,10 @@ const ROUND_OF_16_PHASE = "round_of_16";
 const ROUND_OF_16_EXTERNAL_ROUND_ID = 5;
 const QUARTER_FINALS_PHASE = "quarter_finals";
 const QUARTER_FINALS_EXTERNAL_ROUND_ID = 6;
+const SEMI_FINALS_PHASE = "semi_finals";
+const SEMI_FINALS_EXTERNAL_ROUND_ID = 7;
+const FINAL_PHASE = "final";
+const FINAL_EXTERNAL_ROUND_ID = 8;
 
 export class SecondPhaseService {
   private readonly groupRepository = new GroupRepository();
@@ -26,7 +32,9 @@ export class SecondPhaseService {
     return {
       generatedMatches: await this.matchRepository.countByPhase(ROUND_OF_32_PHASE),
       roundOf16GeneratedMatches: await this.matchRepository.countByPhase(ROUND_OF_16_PHASE),
-      quarterFinalsGeneratedMatches: await this.matchRepository.countByPhase(QUARTER_FINALS_PHASE)
+      quarterFinalsGeneratedMatches: await this.matchRepository.countByPhase(QUARTER_FINALS_PHASE),
+      semiFinalsGeneratedMatches: await this.matchRepository.countByPhase(SEMI_FINALS_PHASE),
+      finalGeneratedMatches: await this.matchRepository.countByPhase(FINAL_PHASE)
     };
   }
 
@@ -333,6 +341,242 @@ export class SecondPhaseService {
       const message = error instanceof Error ? error.message : "Falha desconhecida.";
       logs.push(`Falha inesperada: ${message}`);
       throw new HttpError(500, `Falha ao gerar quartas de final: ${message}`, { logs });
+    }
+  }
+
+  async generateSemiFinals() {
+    const logs: string[] = ["Iniciando geracao das semifinais."];
+
+    try {
+      logs.push("Carregando rodadas e confrontos persistidos.");
+      const [rounds, matches] = await Promise.all([
+        this.roundRepository.listAll(),
+        this.matchRepository.listAll()
+      ]);
+      const quarterFinalMatches = matches.filter((match) => match.phase === QUARTER_FINALS_PHASE);
+
+      logs.push(`Encontrados ${quarterFinalMatches.length} confrontos de quartas.`);
+
+      if (quarterFinalMatches.length !== 4) {
+        logs.push("Falha: as quartas precisam ter exatamente 4 confrontos persistidos.");
+        throw new HttpError(409, "As quartas precisam ter 4 confrontos persistidos.", {
+          logs
+        });
+      }
+
+      const nonOfficialMatches = quarterFinalMatches.filter((match) => match.state !== "official");
+      const matchesWithoutWinner = quarterFinalMatches.filter(
+        (match) => match.result_type !== "home_win" && match.result_type !== "away_win"
+      );
+
+      logs.push(`${quarterFinalMatches.length - nonOfficialMatches.length} confrontos estao oficializados.`);
+
+      if (nonOfficialMatches.length > 0) {
+        logs.push(
+          `Falha: ${nonOfficialMatches.length} confronto(s) ainda nao estao oficializados: ${nonOfficialMatches
+            .map((match) => match.phase_slot)
+            .join(", ")}.`
+        );
+        throw new HttpError(
+          409,
+          "Todos os confrontos das quartas precisam estar oficializados antes de gerar as semifinais.",
+          { logs }
+        );
+      }
+
+      logs.push(`${quarterFinalMatches.length - matchesWithoutWinner.length} confrontos possuem vencedor definido.`);
+
+      if (matchesWithoutWinner.length > 0) {
+        logs.push(
+          `Falha: ${matchesWithoutWinner.length} confronto(s) ainda nao possuem vencedor: ${matchesWithoutWinner
+            .map((match) => match.phase_slot)
+            .join(", ")}.`
+        );
+        throw new HttpError(
+          409,
+          "Todos os confrontos das quartas precisam ter vencedor de mata-mata definido.",
+          { logs }
+        );
+      }
+
+      const matchesByRoundId = new Map(rounds.map((round) => [round.id, round]));
+      logs.push("Montando confrontos das semifinais a partir dos vencedores das quartas.");
+      const generatedMatches = buildSemiFinalMatches(
+        quarterFinalMatches.map((match) => ({
+          phaseSlot: match.phase_slot,
+          state: match.state,
+          resultType: match.result_type,
+          homeParticipantId: match.home_participant_id,
+          awayParticipantId: match.away_participant_id
+        }))
+      );
+
+      logs.push(`Chaveamento montado com ${generatedMatches.length} confrontos de semifinais.`);
+      logs.push("Carregando ou criando registro da rodada 7.");
+      const generatedRound =
+        (await this.roundRepository.getByExternalRoundId(SEMI_FINALS_EXTERNAL_ROUND_ID)) ??
+        (await this.roundRepository.upsert({
+          externalRoundId: SEMI_FINALS_EXTERNAL_ROUND_ID,
+          name: "Semifinais",
+          status: "scheduled",
+          marketStatus: null
+        }));
+
+      logs.push("Substituindo confrontos atuais de semifinais no banco.");
+      const insertedMatches = await this.matchRepository.replacePhaseMatches(
+        SEMI_FINALS_PHASE,
+        generatedMatches.map((match) => ({
+          phase: SEMI_FINALS_PHASE,
+          phaseSlot: match.phaseSlot,
+          groupId: null,
+          roundId: generatedRound.id,
+          homeParticipantId: match.homeParticipantId,
+          awayParticipantId: match.awayParticipantId,
+          homePoints: null,
+          awayPoints: null,
+          resultType: null,
+          state: "scheduled",
+          decidedByRule: "score"
+        }))
+      );
+      const sourceRoundName =
+        matchesByRoundId.get(quarterFinalMatches[0]?.round_id ?? "")?.name ?? "Quartas de final";
+
+      logs.push(`Sucesso: ${insertedMatches.length} confrontos de semifinais foram persistidos.`);
+
+      return {
+        roundId: generatedRound.id,
+        roundName: generatedRound.name,
+        sourceRoundName,
+        generatedMatches: insertedMatches.length,
+        logs
+      };
+    } catch (error) {
+      if (error instanceof HttpError) {
+        throw error;
+      }
+
+      const message = error instanceof Error ? error.message : "Falha desconhecida.";
+      logs.push(`Falha inesperada: ${message}`);
+      throw new HttpError(500, `Falha ao gerar semifinais: ${message}`, { logs });
+    }
+  }
+
+  async generateFinal() {
+    const logs: string[] = ["Iniciando geracao da final."];
+
+    try {
+      logs.push("Carregando rodadas e confrontos persistidos.");
+      const [rounds, matches] = await Promise.all([
+        this.roundRepository.listAll(),
+        this.matchRepository.listAll()
+      ]);
+      const semiFinalMatches = matches.filter((match) => match.phase === SEMI_FINALS_PHASE);
+
+      logs.push(`Encontrados ${semiFinalMatches.length} confrontos de semifinais.`);
+
+      if (semiFinalMatches.length !== 2) {
+        logs.push("Falha: as semifinais precisam ter exatamente 2 confrontos persistidos.");
+        throw new HttpError(409, "As semifinais precisam ter 2 confrontos persistidos.", {
+          logs
+        });
+      }
+
+      const nonOfficialMatches = semiFinalMatches.filter((match) => match.state !== "official");
+      const matchesWithoutWinner = semiFinalMatches.filter(
+        (match) => match.result_type !== "home_win" && match.result_type !== "away_win"
+      );
+
+      logs.push(`${semiFinalMatches.length - nonOfficialMatches.length} confrontos estao oficializados.`);
+
+      if (nonOfficialMatches.length > 0) {
+        logs.push(
+          `Falha: ${nonOfficialMatches.length} confronto(s) ainda nao estao oficializados: ${nonOfficialMatches
+            .map((match) => match.phase_slot)
+            .join(", ")}.`
+        );
+        throw new HttpError(
+          409,
+          "Todos os confrontos das semifinais precisam estar oficializados antes de gerar a final.",
+          { logs }
+        );
+      }
+
+      logs.push(`${semiFinalMatches.length - matchesWithoutWinner.length} confrontos possuem vencedor definido.`);
+
+      if (matchesWithoutWinner.length > 0) {
+        logs.push(
+          `Falha: ${matchesWithoutWinner.length} confronto(s) ainda nao possuem vencedor: ${matchesWithoutWinner
+            .map((match) => match.phase_slot)
+            .join(", ")}.`
+        );
+        throw new HttpError(
+          409,
+          "Todos os confrontos das semifinais precisam ter vencedor de mata-mata definido.",
+          { logs }
+        );
+      }
+
+      const matchesByRoundId = new Map(rounds.map((round) => [round.id, round]));
+      logs.push("Montando confronto da final a partir dos vencedores das semifinais.");
+      const generatedMatches = buildFinalMatches(
+        semiFinalMatches.map((match) => ({
+          phaseSlot: match.phase_slot,
+          state: match.state,
+          resultType: match.result_type,
+          homeParticipantId: match.home_participant_id,
+          awayParticipantId: match.away_participant_id
+        }))
+      );
+
+      logs.push(`Chaveamento montado com ${generatedMatches.length} confronto da final.`);
+      logs.push("Carregando ou criando registro da rodada 8.");
+      const generatedRound =
+        (await this.roundRepository.getByExternalRoundId(FINAL_EXTERNAL_ROUND_ID)) ??
+        (await this.roundRepository.upsert({
+          externalRoundId: FINAL_EXTERNAL_ROUND_ID,
+          name: "Final",
+          status: "scheduled",
+          marketStatus: null
+        }));
+
+      logs.push("Substituindo confronto atual da final no banco.");
+      const insertedMatches = await this.matchRepository.replacePhaseMatches(
+        FINAL_PHASE,
+        generatedMatches.map((match) => ({
+          phase: FINAL_PHASE,
+          phaseSlot: match.phaseSlot,
+          groupId: null,
+          roundId: generatedRound.id,
+          homeParticipantId: match.homeParticipantId,
+          awayParticipantId: match.awayParticipantId,
+          homePoints: null,
+          awayPoints: null,
+          resultType: null,
+          state: "scheduled",
+          decidedByRule: "score"
+        }))
+      );
+      const sourceRoundName =
+        matchesByRoundId.get(semiFinalMatches[0]?.round_id ?? "")?.name ?? "Semifinais";
+
+      logs.push(`Sucesso: ${insertedMatches.length} confronto da final foi persistido.`);
+
+      return {
+        roundId: generatedRound.id,
+        roundName: generatedRound.name,
+        sourceRoundName,
+        generatedMatches: insertedMatches.length,
+        logs
+      };
+    } catch (error) {
+      if (error instanceof HttpError) {
+        throw error;
+      }
+
+      const message = error instanceof Error ? error.message : "Falha desconhecida.";
+      logs.push(`Falha inesperada: ${message}`);
+      throw new HttpError(500, `Falha ao gerar final: ${message}`, { logs });
     }
   }
 }

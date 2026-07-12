@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { roundOf32Matrix } from "@/domain/knockout/bracket-matrix";
 import {
+  buildFinalMatches,
   buildQuarterFinalMatches,
   buildRoundOf16Matches,
   buildRoundOf32Matches,
+  buildSemiFinalMatches,
   type KnockoutStanding
 } from "@/domain/knockout/fill-bracket";
 
@@ -93,6 +95,85 @@ describe("buildQuarterFinalMatches", () => {
       buildQuarterFinalMatches([
         {
           ...officialRoundOf16[0]!,
+          state: "partial"
+        }
+      ])
+    ).toThrow("oficializados");
+  });
+});
+
+describe("buildSemiFinalMatches", () => {
+  const officialQuarterFinals = Array.from({ length: 4 }, (_, index) => {
+    const gameNumber = 97 + index;
+
+    return {
+      phaseSlot: `QF-${gameNumber}`,
+      state: "official",
+      resultType: gameNumber % 2 === 0 ? "away_win" : "home_win",
+      homeParticipantId: `home-${gameNumber}`,
+      awayParticipantId: `away-${gameNumber}`
+    };
+  });
+
+  it("crosses quarter-final winners according to the semi-final bracket", () => {
+    const matches = buildSemiFinalMatches(officialQuarterFinals);
+
+    expect(matches[0]).toMatchObject({
+      phaseSlot: "SF-101",
+      homeParticipantId: "home-97",
+      awayParticipantId: "away-98",
+      homeSourceSlot: "QF-97",
+      awaySourceSlot: "QF-98"
+    });
+    expect(matches[1]).toMatchObject({
+      phaseSlot: "SF-102",
+      homeParticipantId: "home-99",
+      awayParticipantId: "away-100"
+    });
+  });
+
+  it("does not build semi-finals matches from non-official source matches", () => {
+    expect(() =>
+      buildSemiFinalMatches([
+        {
+          ...officialQuarterFinals[0]!,
+          state: "partial"
+        }
+      ])
+    ).toThrow("oficializados");
+  });
+});
+
+describe("buildFinalMatches", () => {
+  const officialSemiFinals = Array.from({ length: 2 }, (_, index) => {
+    const gameNumber = 101 + index;
+
+    return {
+      phaseSlot: `SF-${gameNumber}`,
+      state: "official",
+      resultType: gameNumber % 2 === 0 ? "away_win" : "home_win",
+      homeParticipantId: `home-${gameNumber}`,
+      awayParticipantId: `away-${gameNumber}`
+    };
+  });
+
+  it("crosses semi-final winners into the final", () => {
+    const matches = buildFinalMatches(officialSemiFinals);
+
+    expect(matches[0]).toMatchObject({
+      phaseSlot: "F-103",
+      homeParticipantId: "home-101",
+      awayParticipantId: "away-102",
+      homeSourceSlot: "SF-101",
+      awaySourceSlot: "SF-102"
+    });
+  });
+
+  it("does not build the final from non-official source matches", () => {
+    expect(() =>
+      buildFinalMatches([
+        {
+          ...officialSemiFinals[0]!,
           state: "partial"
         }
       ])
