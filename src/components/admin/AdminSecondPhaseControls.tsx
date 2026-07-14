@@ -8,13 +8,15 @@ export function AdminSecondPhaseControls({
   roundOf16GeneratedMatches,
   quarterFinalsGeneratedMatches,
   semiFinalsGeneratedMatches,
-  finalGeneratedMatches
+  finalGeneratedMatches,
+  thirdPlaceGeneratedMatches
 }: {
   generatedMatches: number;
   roundOf16GeneratedMatches: number;
   quarterFinalsGeneratedMatches: number;
   semiFinalsGeneratedMatches: number;
   finalGeneratedMatches: number;
+  thirdPlaceGeneratedMatches: number;
 }) {
   const router = useRouter();
   const [message, setMessage] = useState<string | null>(null);
@@ -56,7 +58,9 @@ export function AdminSecondPhaseControls({
         );
         router.refresh();
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : "Falha inesperada.");
+        setMessage(
+          error instanceof Error ? error.message : "Falha inesperada."
+        );
       }
     });
   };
@@ -100,7 +104,9 @@ export function AdminSecondPhaseControls({
         setRoundOf16Logs(logs);
         router.refresh();
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : "Falha inesperada.");
+        setMessage(
+          error instanceof Error ? error.message : "Falha inesperada."
+        );
       }
     });
   };
@@ -144,7 +150,9 @@ export function AdminSecondPhaseControls({
         setQuarterFinalsLogs(logs);
         router.refresh();
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : "Falha inesperada.");
+        setMessage(
+          error instanceof Error ? error.message : "Falha inesperada."
+        );
       }
     });
   };
@@ -188,7 +196,9 @@ export function AdminSecondPhaseControls({
         setSemiFinalsLogs(logs);
         router.refresh();
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : "Falha inesperada.");
+        setMessage(
+          error instanceof Error ? error.message : "Falha inesperada."
+        );
       }
     });
   };
@@ -198,9 +208,9 @@ export function AdminSecondPhaseControls({
     setFinalLogs([]);
 
     if (
-      finalGeneratedMatches > 0 &&
+      (finalGeneratedMatches > 0 || thirdPlaceGeneratedMatches > 0) &&
       !window.confirm(
-        "A final ja possui confronto gerado. Deseja substituir o confronto atual?"
+        "A fase final ja possui confrontos gerados. Deseja substituir a final e a disputa de terceiro lugar?"
       )
     ) {
       return;
@@ -227,12 +237,14 @@ export function AdminSecondPhaseControls({
         }
 
         setMessage(
-          `${body.generatedMatches ?? 0} confronto da final gerado a partir de ${body.sourceRoundName ?? "semifinais"}.`
+          `${body.generatedMatches ?? 0} confrontos da fase final gerados a partir de ${body.sourceRoundName ?? "semifinais"}.`
         );
         setFinalLogs(logs);
         router.refresh();
       } catch (error) {
-        setMessage(error instanceof Error ? error.message : "Falha inesperada.");
+        setMessage(
+          error instanceof Error ? error.message : "Falha inesperada."
+        );
       }
     });
   };
@@ -300,9 +312,9 @@ export function AdminSecondPhaseControls({
         {isPending ? "gerando..." : "regenerar final"}
       </button>
       <p className="muted">
-        {finalGeneratedMatches > 0
-          ? `${finalGeneratedMatches} confronto da final ja persistido.`
-          : "A final sera gerada automaticamente quando a rodada 8 estiver disponivel, com fallback manual por aqui."}
+        {finalGeneratedMatches > 0 || thirdPlaceGeneratedMatches > 0
+          ? `${finalGeneratedMatches} confronto da final e ${thirdPlaceGeneratedMatches} disputa de terceiro lugar ja persistidos.`
+          : "A fase final sera gerada automaticamente quando a rodada 8 estiver disponivel, com fallback manual por aqui."}
       </p>
       {message ? <p className="muted">{message}</p> : null}
       {roundOf16Logs.length > 0 ? (

@@ -12,25 +12,39 @@ const FINAL_EXTERNAL_ROUND_ID = 8;
 
 export default async function SemiFinalPage() {
   const snapshot = await publicReadinessService.ensurePublicDataReady();
-  const semiFinalsMatches = snapshot.matches.filter((match) => match.phase === "semi_finals");
-  const finalMatches = snapshot.matches.filter((match) => match.phase === "final");
+  const semiFinalsMatches = snapshot.matches.filter(
+    (match) => match.phase === "semi_finals"
+  );
+  const finalRoundMatches = snapshot.matches.filter(
+    (match) => match.phase === "final" || match.phase === "third_place"
+  );
   const semiFinalsMostPicked =
     snapshot.mostPickedByRound[String(SEMI_FINALS_EXTERNAL_ROUND_ID)] ?? [];
   const shouldShowRound =
     snapshot.availableRounds.includes(SEMI_FINALS_EXTERNAL_ROUND_ID) &&
     semiFinalsMatches.length > 0;
   const finalAvailable =
-    snapshot.availableRounds.includes(FINAL_EXTERNAL_ROUND_ID) && finalMatches.length > 0;
+    snapshot.availableRounds.includes(FINAL_EXTERNAL_ROUND_ID) &&
+    finalRoundMatches.some((match) => match.state !== "scheduled");
   const visibleMatches = shouldShowRound ? semiFinalsMatches : [];
 
   return (
     <main className="shell public-home">
       <PhaseHero
         title="Semi-final"
-        completedMatches={visibleMatches.filter((match) => match.state !== "scheduled").length}
+        completedMatches={
+          visibleMatches.filter((match) => match.state !== "scheduled").length
+        }
         totalMatches={2}
-        previousPhaseLink={{ href: "/quartas-de-final", label: "Voltar para as quartas de final" }}
-        nextPhaseLink={finalAvailable ? { href: "/final", label: "Ir para a final" } : undefined}
+        previousPhaseLink={{
+          href: "/quartas-de-final",
+          label: "Voltar para as quartas de final"
+        }}
+        nextPhaseLink={
+          finalAvailable
+            ? { href: "/final", label: "Ir para a final" }
+            : undefined
+        }
         nextPhaseDisabled={!finalAvailable}
       />
 

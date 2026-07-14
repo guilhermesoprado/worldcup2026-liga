@@ -6,12 +6,15 @@ import {
   buildRoundOf16Matches,
   buildRoundOf32Matches,
   buildSemiFinalMatches,
+  buildThirdPlaceMatches,
   type KnockoutStanding
 } from "@/domain/knockout/fill-bracket";
 
 const groupCodes = "ABCDEFGHIJKL".split("");
 
-function buildStandings(thirdGroups: string[] = ["A", "C", "E", "F", "H", "I", "J", "L"]) {
+function buildStandings(
+  thirdGroups: string[] = ["A", "C", "E", "F", "H", "I", "J", "L"]
+) {
   return groupCodes.flatMap((groupCode) => {
     const thirdQualified = thirdGroups.includes(groupCode);
 
@@ -45,7 +48,9 @@ describe("buildRoundOf32Matches", () => {
 
   it("assigns best thirds only to compatible third-place slots", () => {
     const matches = buildRoundOf32Matches(buildStandings(), () => 0);
-    const byPhaseSlot = new Map(matches.map((match) => [match.phaseSlot, match]));
+    const byPhaseSlot = new Map(
+      matches.map((match) => [match.phaseSlot, match])
+    );
 
     for (const slot of roundOf32Matrix) {
       if (typeof slot.awaySeed === "string") {
@@ -172,6 +177,43 @@ describe("buildFinalMatches", () => {
   it("does not build the final from non-official source matches", () => {
     expect(() =>
       buildFinalMatches([
+        {
+          ...officialSemiFinals[0]!,
+          state: "partial"
+        }
+      ])
+    ).toThrow("oficializados");
+  });
+});
+
+describe("buildThirdPlaceMatches", () => {
+  const officialSemiFinals = Array.from({ length: 2 }, (_, index) => {
+    const gameNumber = 101 + index;
+
+    return {
+      phaseSlot: `SF-${gameNumber}`,
+      state: "official",
+      resultType: gameNumber % 2 === 0 ? "away_win" : "home_win",
+      homeParticipantId: `home-${gameNumber}`,
+      awayParticipantId: `away-${gameNumber}`
+    };
+  });
+
+  it("crosses semi-final losers into the third-place match", () => {
+    const matches = buildThirdPlaceMatches(officialSemiFinals);
+
+    expect(matches[0]).toMatchObject({
+      phaseSlot: "TP-104",
+      homeParticipantId: "away-101",
+      awayParticipantId: "home-102",
+      homeSourceSlot: "SF-101",
+      awaySourceSlot: "SF-102"
+    });
+  });
+
+  it("does not build the third-place match from non-official source matches", () => {
+    expect(() =>
+      buildThirdPlaceMatches([
         {
           ...officialSemiFinals[0]!,
           state: "partial"

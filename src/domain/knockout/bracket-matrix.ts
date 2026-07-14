@@ -56,6 +56,8 @@ export type SemiFinalSlot = QuarterFinalSlot;
 
 export type FinalSlot = QuarterFinalSlot;
 
+export type ThirdPlaceSlot = QuarterFinalSlot;
+
 export const roundOf32Matrix: RoundOf32Slot[] = [
   { phaseSlot: "R32-73", gameNumber: 73, homeSeed: "A2", awaySeed: "B2" },
   {
@@ -116,30 +118,114 @@ export const roundOf32Matrix: RoundOf32Slot[] = [
 ];
 
 export const roundOf16Matrix: RoundOf16Slot[] = [
-  { phaseSlot: "R16-89", gameNumber: 89, homeSourceGameNumber: 74, awaySourceGameNumber: 77 },
-  { phaseSlot: "R16-90", gameNumber: 90, homeSourceGameNumber: 73, awaySourceGameNumber: 75 },
-  { phaseSlot: "R16-91", gameNumber: 91, homeSourceGameNumber: 76, awaySourceGameNumber: 78 },
-  { phaseSlot: "R16-92", gameNumber: 92, homeSourceGameNumber: 79, awaySourceGameNumber: 80 },
-  { phaseSlot: "R16-93", gameNumber: 93, homeSourceGameNumber: 83, awaySourceGameNumber: 84 },
-  { phaseSlot: "R16-94", gameNumber: 94, homeSourceGameNumber: 81, awaySourceGameNumber: 82 },
-  { phaseSlot: "R16-95", gameNumber: 95, homeSourceGameNumber: 86, awaySourceGameNumber: 88 },
-  { phaseSlot: "R16-96", gameNumber: 96, homeSourceGameNumber: 85, awaySourceGameNumber: 87 }
+  {
+    phaseSlot: "R16-89",
+    gameNumber: 89,
+    homeSourceGameNumber: 74,
+    awaySourceGameNumber: 77
+  },
+  {
+    phaseSlot: "R16-90",
+    gameNumber: 90,
+    homeSourceGameNumber: 73,
+    awaySourceGameNumber: 75
+  },
+  {
+    phaseSlot: "R16-91",
+    gameNumber: 91,
+    homeSourceGameNumber: 76,
+    awaySourceGameNumber: 78
+  },
+  {
+    phaseSlot: "R16-92",
+    gameNumber: 92,
+    homeSourceGameNumber: 79,
+    awaySourceGameNumber: 80
+  },
+  {
+    phaseSlot: "R16-93",
+    gameNumber: 93,
+    homeSourceGameNumber: 83,
+    awaySourceGameNumber: 84
+  },
+  {
+    phaseSlot: "R16-94",
+    gameNumber: 94,
+    homeSourceGameNumber: 81,
+    awaySourceGameNumber: 82
+  },
+  {
+    phaseSlot: "R16-95",
+    gameNumber: 95,
+    homeSourceGameNumber: 86,
+    awaySourceGameNumber: 88
+  },
+  {
+    phaseSlot: "R16-96",
+    gameNumber: 96,
+    homeSourceGameNumber: 85,
+    awaySourceGameNumber: 87
+  }
 ];
 
 export const quarterFinalMatrix: QuarterFinalSlot[] = [
-  { phaseSlot: "QF-97", gameNumber: 97, homeSourceGameNumber: 89, awaySourceGameNumber: 90 },
-  { phaseSlot: "QF-98", gameNumber: 98, homeSourceGameNumber: 91, awaySourceGameNumber: 92 },
-  { phaseSlot: "QF-99", gameNumber: 99, homeSourceGameNumber: 93, awaySourceGameNumber: 94 },
-  { phaseSlot: "QF-100", gameNumber: 100, homeSourceGameNumber: 95, awaySourceGameNumber: 96 }
+  {
+    phaseSlot: "QF-97",
+    gameNumber: 97,
+    homeSourceGameNumber: 89,
+    awaySourceGameNumber: 90
+  },
+  {
+    phaseSlot: "QF-98",
+    gameNumber: 98,
+    homeSourceGameNumber: 91,
+    awaySourceGameNumber: 92
+  },
+  {
+    phaseSlot: "QF-99",
+    gameNumber: 99,
+    homeSourceGameNumber: 93,
+    awaySourceGameNumber: 94
+  },
+  {
+    phaseSlot: "QF-100",
+    gameNumber: 100,
+    homeSourceGameNumber: 95,
+    awaySourceGameNumber: 96
+  }
 ];
 
 export const semiFinalMatrix: SemiFinalSlot[] = [
-  { phaseSlot: "SF-101", gameNumber: 101, homeSourceGameNumber: 97, awaySourceGameNumber: 98 },
-  { phaseSlot: "SF-102", gameNumber: 102, homeSourceGameNumber: 99, awaySourceGameNumber: 100 }
+  {
+    phaseSlot: "SF-101",
+    gameNumber: 101,
+    homeSourceGameNumber: 97,
+    awaySourceGameNumber: 98
+  },
+  {
+    phaseSlot: "SF-102",
+    gameNumber: 102,
+    homeSourceGameNumber: 99,
+    awaySourceGameNumber: 100
+  }
 ];
 
 export const finalMatrix: FinalSlot[] = [
-  { phaseSlot: "F-103", gameNumber: 103, homeSourceGameNumber: 101, awaySourceGameNumber: 102 }
+  {
+    phaseSlot: "F-103",
+    gameNumber: 103,
+    homeSourceGameNumber: 101,
+    awaySourceGameNumber: 102
+  }
+];
+
+export const thirdPlaceMatrix: ThirdPlaceSlot[] = [
+  {
+    phaseSlot: "TP-104",
+    gameNumber: 104,
+    homeSourceGameNumber: 101,
+    awaySourceGameNumber: 102
+  }
 ];
 
 export const bracketMatrix = roundOf32Matrix;

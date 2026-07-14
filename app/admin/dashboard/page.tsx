@@ -47,7 +47,9 @@ export default async function AdminDashboardPage() {
               <div className="admin-stat">
                 <strong>Rodada atual</strong>
                 <span>{status.currentRound?.name ?? "Nao definida"}</span>
-                <small className="muted">{formatStatus(status.currentRound?.status)}</small>
+                <small className="muted">
+                  {formatStatus(status.currentRound?.status)}
+                </small>
               </div>
               <div className="admin-stat">
                 <strong>Rodada oficial</strong>
@@ -66,7 +68,9 @@ export default async function AdminDashboardPage() {
               <div className="admin-stat">
                 <strong>Intervalo automatico</strong>
                 <span>{status.config.interval_minutes} minutos</span>
-                <small className="muted">Modo access-driven com fallback manual</small>
+                <small className="muted">
+                  Modo access-driven com fallback manual
+                </small>
               </div>
             </div>
 
@@ -88,8 +92,9 @@ export default async function AdminDashboardPage() {
               </div>
               <span className="badge">
                 {secondPhaseStatus.roundOf16GeneratedMatches > 0
-                  ? secondPhaseStatus.finalGeneratedMatches > 0
-                    ? "final gerada"
+                  ? secondPhaseStatus.finalGeneratedMatches > 0 &&
+                    secondPhaseStatus.thirdPlaceGeneratedMatches > 0
+                    ? "fase final gerada"
                     : secondPhaseStatus.semiFinalsGeneratedMatches > 0
                       ? "semifinais geradas"
                       : secondPhaseStatus.quarterFinalsGeneratedMatches > 0
@@ -103,10 +108,19 @@ export default async function AdminDashboardPage() {
 
             <AdminSecondPhaseControls
               generatedMatches={secondPhaseStatus.generatedMatches}
-              roundOf16GeneratedMatches={secondPhaseStatus.roundOf16GeneratedMatches}
-              quarterFinalsGeneratedMatches={secondPhaseStatus.quarterFinalsGeneratedMatches}
-              semiFinalsGeneratedMatches={secondPhaseStatus.semiFinalsGeneratedMatches}
+              roundOf16GeneratedMatches={
+                secondPhaseStatus.roundOf16GeneratedMatches
+              }
+              quarterFinalsGeneratedMatches={
+                secondPhaseStatus.quarterFinalsGeneratedMatches
+              }
+              semiFinalsGeneratedMatches={
+                secondPhaseStatus.semiFinalsGeneratedMatches
+              }
               finalGeneratedMatches={secondPhaseStatus.finalGeneratedMatches}
+              thirdPlaceGeneratedMatches={
+                secondPhaseStatus.thirdPlaceGeneratedMatches
+              }
             />
           </article>
 
@@ -114,7 +128,9 @@ export default async function AdminDashboardPage() {
             <div className="card__header">
               <div>
                 <h2 className="card__title">Ultima execucao</h2>
-                <span className="muted">Resultado mais recente do processo de sync</span>
+                <span className="muted">
+                  Resultado mais recente do processo de sync
+                </span>
               </div>
             </div>
 
@@ -127,18 +143,24 @@ export default async function AdminDashboardPage() {
                   <strong>Origem:</strong> {status.latestExecution.trigger_type}
                 </p>
                 <p>
-                  <strong>Inicio:</strong> {formatDateTime(status.latestExecution.started_at)}
+                  <strong>Inicio:</strong>{" "}
+                  {formatDateTime(status.latestExecution.started_at)}
                 </p>
                 <p>
-                  <strong>Fim:</strong> {formatDateTime(status.latestExecution.finished_at)}
+                  <strong>Fim:</strong>{" "}
+                  {formatDateTime(status.latestExecution.finished_at)}
                 </p>
                 <p>
-                  <strong>Resumo:</strong> {status.latestExecution.summary_message}
+                  <strong>Resumo:</strong>{" "}
+                  {status.latestExecution.summary_message}
                 </p>
                 <p>
                   <strong>Rodada afetada:</strong>{" "}
                   {status.latestExecution.rounds?.id ? (
-                    <Link className="text-link" href={`/admin/rodadas/${status.latestExecution.rounds.id}`}>
+                    <Link
+                      className="text-link"
+                      href={`/admin/rodadas/${status.latestExecution.rounds.id}`}
+                    >
                       {status.latestExecution.rounds.name}
                     </Link>
                   ) : (
@@ -146,7 +168,10 @@ export default async function AdminDashboardPage() {
                   )}
                 </p>
                 <p>
-                  <Link className="text-link" href={`/admin/execucoes/${status.latestExecution.id}`}>
+                  <Link
+                    className="text-link"
+                    href={`/admin/execucoes/${status.latestExecution.id}`}
+                  >
                     ver detalhe da execucao
                   </Link>
                 </p>
@@ -172,18 +197,23 @@ export default async function AdminDashboardPage() {
               <div className="admin-stat">
                 <strong>Confrontos</strong>
                 <span>{status.persistedSnapshotCounts.matches}</span>
-                <small className="muted">esperado para grupos: {status.totalMatches}</small>
+                <small className="muted">
+                  esperado para grupos: {status.totalMatches}
+                </small>
               </div>
               <div className="admin-stat">
                 <strong>Classificacoes</strong>
                 <span>{status.persistedSnapshotCounts.standings}</span>
-                <small className="muted">snapshots de tabela por rodada consolidada</small>
+                <small className="muted">
+                  snapshots de tabela por rodada consolidada
+                </small>
               </div>
               <div className="admin-stat">
                 <strong>Escalacoes</strong>
                 <span>{status.persistedSnapshotCounts.lineupSnapshots}</span>
                 <small className="muted">
-                  {status.persistedSnapshotCounts.lineupPlayers} jogadores persistidos
+                  {status.persistedSnapshotCounts.lineupPlayers} jogadores
+                  persistidos
                 </small>
               </div>
               <div className="admin-stat">
@@ -198,7 +228,9 @@ export default async function AdminDashboardPage() {
             <div className="card__header">
               <div>
                 <h2 className="card__title">Historico recente</h2>
-                <span className="muted">Ultimas execucoes registradas no banco local</span>
+                <span className="muted">
+                  Ultimas execucoes registradas no banco local
+                </span>
               </div>
             </div>
 
@@ -207,22 +239,36 @@ export default async function AdminDashboardPage() {
                 {status.recentExecutions.map((execution) => (
                   <article className="admin-history__item" key={execution.id}>
                     <div className="admin-history__top">
-                      <span className={badgeClassForExecution(execution.status)}>
+                      <span
+                        className={badgeClassForExecution(execution.status)}
+                      >
                         {execution.status}
                       </span>
-                      <span className="muted">{formatDateTime(execution.started_at)}</span>
+                      <span className="muted">
+                        {formatDateTime(execution.started_at)}
+                      </span>
                     </div>
-                    <strong>{execution.rounds?.name ?? "execucao sem rodada vinculada"}</strong>
+                    <strong>
+                      {execution.rounds?.name ??
+                        "execucao sem rodada vinculada"}
+                    </strong>
                     <span className="muted">{execution.summary_message}</span>
                     <span className="muted">
-                      origem: {execution.trigger_type} | fim: {formatDateTime(execution.finished_at)}
+                      origem: {execution.trigger_type} | fim:{" "}
+                      {formatDateTime(execution.finished_at)}
                     </span>
                     <div className="section-actions">
-                      <Link className="text-link" href={`/admin/execucoes/${execution.id}`}>
+                      <Link
+                        className="text-link"
+                        href={`/admin/execucoes/${execution.id}`}
+                      >
                         ver execucao
                       </Link>
                       {execution.rounds?.id ? (
-                        <Link className="text-link" href={`/admin/rodadas/${execution.rounds.id}`}>
+                        <Link
+                          className="text-link"
+                          href={`/admin/rodadas/${execution.rounds.id}`}
+                        >
                           ver rodada
                         </Link>
                       ) : null}
@@ -249,12 +295,14 @@ export default async function AdminDashboardPage() {
             <div>
               <h2 className="card__title">Base local indisponivel</h2>
               <span className="muted">
-                Nao foi possivel conectar ao Supabase configurado em `.env.local`.
+                Nao foi possivel conectar ao Supabase configurado em
+                `.env.local`.
               </span>
             </div>
           </div>
           <p className="muted">
-            Verifique se o banco local esta ativo em `127.0.0.1:54321` antes de abrir o painel.
+            Verifique se o banco local esta ativo em `127.0.0.1:54321` antes de
+            abrir o painel.
           </p>
           <p className="muted">{formatErrorMessage(error)}</p>
         </section>
@@ -303,7 +351,9 @@ function badgeClassForExecution(status: string) {
 
 function formatErrorMessage(error: unknown) {
   if (error && typeof error === "object" && "message" in error) {
-    return String((error as { message?: unknown }).message ?? "Falha desconhecida");
+    return String(
+      (error as { message?: unknown }).message ?? "Falha desconhecida"
+    );
   }
 
   return error instanceof Error ? error.message : "Falha desconhecida";

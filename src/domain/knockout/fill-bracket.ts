@@ -4,6 +4,7 @@ import {
   quarterFinalMatrix,
   roundOf16Matrix,
   semiFinalMatrix,
+  thirdPlaceMatrix,
   type BracketSeed,
   type DirectSeed,
   type ThirdSeedSlot
@@ -57,17 +58,27 @@ export type FilledSemiFinalMatch = FilledRoundOf16Match;
 
 export type FilledFinalMatch = FilledRoundOf16Match;
 
+export type FilledThirdPlaceMatch = FilledRoundOf16Match;
+
 export function fillBracket(qualifiedTeams: QualifiedTeam[]) {
   const index = new Map(qualifiedTeams.map((team) => [team.seedLabel, team]));
 
   return roundOf32Matrix.map((slot) => ({
     phaseSlot: slot.phaseSlot,
-    homeParticipantId: typeof slot.homeSeed === "string" ? index.get(slot.homeSeed)?.participantId ?? null : null,
-    awayParticipantId: typeof slot.awaySeed === "string" ? index.get(slot.awaySeed)?.participantId ?? null : null
+    homeParticipantId:
+      typeof slot.homeSeed === "string"
+        ? (index.get(slot.homeSeed)?.participantId ?? null)
+        : null,
+    awayParticipantId:
+      typeof slot.awaySeed === "string"
+        ? (index.get(slot.awaySeed)?.participantId ?? null)
+        : null
   }));
 }
 
-export function buildRoundOf16Matches(sourceMatches: KnockoutSourceMatch[]): FilledRoundOf16Match[] {
+export function buildRoundOf16Matches(
+  sourceMatches: KnockoutSourceMatch[]
+): FilledRoundOf16Match[] {
   return buildMatchesFromWinners({
     sourceMatches,
     matrix: roundOf16Matrix,
@@ -76,7 +87,9 @@ export function buildRoundOf16Matches(sourceMatches: KnockoutSourceMatch[]): Fil
   });
 }
 
-export function buildQuarterFinalMatches(sourceMatches: KnockoutSourceMatch[]): FilledQuarterFinalMatch[] {
+export function buildQuarterFinalMatches(
+  sourceMatches: KnockoutSourceMatch[]
+): FilledQuarterFinalMatch[] {
   return buildMatchesFromWinners({
     sourceMatches,
     matrix: quarterFinalMatrix,
@@ -85,7 +98,9 @@ export function buildQuarterFinalMatches(sourceMatches: KnockoutSourceMatch[]): 
   });
 }
 
-export function buildSemiFinalMatches(sourceMatches: KnockoutSourceMatch[]): FilledSemiFinalMatch[] {
+export function buildSemiFinalMatches(
+  sourceMatches: KnockoutSourceMatch[]
+): FilledSemiFinalMatch[] {
   return buildMatchesFromWinners({
     sourceMatches,
     matrix: semiFinalMatrix,
@@ -94,12 +109,27 @@ export function buildSemiFinalMatches(sourceMatches: KnockoutSourceMatch[]): Fil
   });
 }
 
-export function buildFinalMatches(sourceMatches: KnockoutSourceMatch[]): FilledFinalMatch[] {
-  return buildMatchesFromWinners({
+export function buildFinalMatches(
+  sourceMatches: KnockoutSourceMatch[]
+): FilledFinalMatch[] {
+  return buildMatchesFromResults({
     sourceMatches,
     matrix: finalMatrix,
     sourcePhaseLabel: "das semifinais",
-    targetPhaseLabel: "final"
+    targetPhaseLabel: "final",
+    resultSource: "winner"
+  });
+}
+
+export function buildThirdPlaceMatches(
+  sourceMatches: KnockoutSourceMatch[]
+): FilledThirdPlaceMatch[] {
+  return buildMatchesFromResults({
+    sourceMatches,
+    matrix: thirdPlaceMatrix,
+    sourcePhaseLabel: "das semifinais",
+    targetPhaseLabel: "disputa de terceiro lugar",
+    resultSource: "loser"
   });
 }
 
@@ -119,7 +149,37 @@ function buildMatchesFromWinners({
   sourcePhaseLabel: string;
   targetPhaseLabel: string;
 }) {
-  const winnersByGameNumber = new Map<number, { participantId: string; phaseSlot: string }>();
+  return buildMatchesFromResults({
+    sourceMatches,
+    matrix,
+    sourcePhaseLabel,
+    targetPhaseLabel,
+    resultSource: "winner"
+  });
+}
+
+function buildMatchesFromResults({
+  sourceMatches,
+  matrix,
+  sourcePhaseLabel,
+  targetPhaseLabel,
+  resultSource
+}: {
+  sourceMatches: KnockoutSourceMatch[];
+  matrix: Array<{
+    phaseSlot: string;
+    gameNumber: number;
+    homeSourceGameNumber: number;
+    awaySourceGameNumber: number;
+  }>;
+  sourcePhaseLabel: string;
+  targetPhaseLabel: string;
+  resultSource: "winner" | "loser";
+}) {
+  const participantsByGameNumber = new Map<
+    number,
+    { participantId: string; phaseSlot: string }
+  >();
 
   for (const match of sourceMatches) {
     const gameNumber = extractGameNumber(match.phaseSlot);
@@ -129,27 +189,30 @@ function buildMatchesFromWinners({
     }
 
     if (match.state !== "official") {
-      throw new Error(`Todos os confrontos ${sourcePhaseLabel} precisam estar oficializados.`);
+      throw new Error(
+        `Todos os confrontos ${sourcePhaseLabel} precisam estar oficializados.`
+      );
     }
 
     if (match.resultType !== "home_win" && match.resultType !== "away_win") {
-      throw new Error(`Confronto ${match.phaseSlot} ainda nao possui vencedor de mata-mata.`);
+      throw new Error(
+        `Confronto ${match.phaseSlot} ainda nao possui vencedor de mata-mata.`
+      );
     }
 
-    winnersByGameNumber.set(gameNumber, {
+    participantsByGameNumber.set(gameNumber, {
       phaseSlot: match.phaseSlot,
-      participantId:
-        match.resultType === "home_win" ? match.homeParticipantId : match.awayParticipantId
+      participantId: resolveParticipantFromResult(match, resultSource)
     });
   }
 
   return matrix.map((slot) => {
-    const home = winnersByGameNumber.get(slot.homeSourceGameNumber);
-    const away = winnersByGameNumber.get(slot.awaySourceGameNumber);
+    const home = participantsByGameNumber.get(slot.homeSourceGameNumber);
+    const away = participantsByGameNumber.get(slot.awaySourceGameNumber);
 
     if (!home || !away) {
       throw new Error(
-        `Nao foi possivel encontrar vencedores para gerar ${targetPhaseLabel} a partir dos jogos ${slot.homeSourceGameNumber} e ${slot.awaySourceGameNumber}.`
+        `Nao foi possivel encontrar classificados para gerar ${targetPhaseLabel} a partir dos jogos ${slot.homeSourceGameNumber} e ${slot.awaySourceGameNumber}.`
       );
     }
 
@@ -162,6 +225,19 @@ function buildMatchesFromWinners({
       awaySourceSlot: away.phaseSlot
     };
   });
+}
+
+function resolveParticipantFromResult(
+  match: KnockoutSourceMatch,
+  resultSource: "winner" | "loser"
+) {
+  const homeWon = match.resultType === "home_win";
+
+  if (resultSource === "winner") {
+    return homeWon ? match.homeParticipantId : match.awayParticipantId;
+  }
+
+  return homeWon ? match.awayParticipantId : match.homeParticipantId;
 }
 
 export function buildRoundOf32Matches(
@@ -201,20 +277,25 @@ export function buildRoundOf32Matches(
 }
 
 function groupFinalStandings(standings: KnockoutStanding[]) {
-  const grouped = standings.reduce<Record<string, KnockoutStanding[]>>((acc, standing) => {
-    if (!acc[standing.groupCode]) {
-      acc[standing.groupCode] = [];
-    }
+  const grouped = standings.reduce<Record<string, KnockoutStanding[]>>(
+    (acc, standing) => {
+      if (!acc[standing.groupCode]) {
+        acc[standing.groupCode] = [];
+      }
 
-    acc[standing.groupCode]!.push(standing);
-    return acc;
-  }, {});
+      acc[standing.groupCode]!.push(standing);
+      return acc;
+    },
+    {}
+  );
 
   Object.values(grouped).forEach((groupStandings) =>
     groupStandings.sort((left, right) => left.position - right.position)
   );
 
-  const completeGroups = Object.entries(grouped).filter(([, groupStandings]) => groupStandings.length >= 4);
+  const completeGroups = Object.entries(grouped).filter(
+    ([, groupStandings]) => groupStandings.length >= 4
+  );
 
   if (completeGroups.length !== 12) {
     throw new Error("A classificacao final precisa ter 12 grupos completos.");
@@ -223,7 +304,9 @@ function groupFinalStandings(standings: KnockoutStanding[]) {
   return grouped;
 }
 
-function buildDirectSeedIndex(standingsByGroup: Record<string, KnockoutStanding[]>) {
+function buildDirectSeedIndex(
+  standingsByGroup: Record<string, KnockoutStanding[]>
+) {
   const directSeeds = new Map<DirectSeed, KnockoutStanding>();
 
   for (const [groupCode, groupStandings] of Object.entries(standingsByGroup)) {
@@ -231,7 +314,9 @@ function buildDirectSeedIndex(standingsByGroup: Record<string, KnockoutStanding[
     const second = groupStandings[1];
 
     if (!first || !second) {
-      throw new Error(`Grupo ${groupCode} nao possui primeiro e segundo colocados.`);
+      throw new Error(
+        `Grupo ${groupCode} nao possui primeiro e segundo colocados.`
+      );
     }
 
     directSeeds.set(`${groupCode}1` as DirectSeed, first);
@@ -262,7 +347,9 @@ function resolveSeed(
   const assignedThird = thirdAssignments.get(thirdSlotKey(seed));
 
   if (!assignedThird) {
-    throw new Error(`Nao foi possivel preencher terceiro para ${thirdSlotKey(seed)}.`);
+    throw new Error(
+      `Nao foi possivel preencher terceiro para ${thirdSlotKey(seed)}.`
+    );
   }
 
   return {
@@ -276,7 +363,9 @@ function assignThirdPlacedSlots(
   random: () => number
 ) {
   if (thirdPlacedTeams.length !== 8) {
-    throw new Error("A segunda fase precisa exatamente dos 8 melhores terceiros.");
+    throw new Error(
+      "A segunda fase precisa exatamente dos 8 melhores terceiros."
+    );
   }
 
   const thirdSlots = roundOf32Matrix
@@ -289,7 +378,9 @@ function assignThirdPlacedSlots(
   );
 
   if (!assignments) {
-    throw new Error("Nao ha combinacao valida para sortear os melhores terceiros nos slots disponiveis.");
+    throw new Error(
+      "Nao ha combinacao valida para sortear os melhores terceiros nos slots disponiveis."
+    );
   }
 
   return assignments;
@@ -305,7 +396,9 @@ function assignSlotBacktracking(
   }
 
   const [slot, ...nextSlots] = remainingSlots;
-  const eligibleTeams = remainingTeams.filter((team) => slot.eligibleGroups.includes(team.groupCode));
+  const eligibleTeams = remainingTeams.filter((team) =>
+    slot.eligibleGroups.includes(team.groupCode)
+  );
 
   for (const team of eligibleTeams) {
     const nextAssignments = new Map(assignments);
@@ -313,7 +406,9 @@ function assignSlotBacktracking(
 
     const result = assignSlotBacktracking(
       nextSlots,
-      remainingTeams.filter((remainingTeam) => remainingTeam.participantId !== team.participantId),
+      remainingTeams.filter(
+        (remainingTeam) => remainingTeam.participantId !== team.participantId
+      ),
       nextAssignments
     );
 

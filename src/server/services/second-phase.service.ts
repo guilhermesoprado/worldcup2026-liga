@@ -3,7 +3,8 @@ import {
   buildQuarterFinalMatches,
   buildRoundOf16Matches,
   buildRoundOf32Matches,
-  buildSemiFinalMatches
+  buildSemiFinalMatches,
+  buildThirdPlaceMatches
 } from "@/domain/knockout/fill-bracket";
 import { HttpError } from "@/lib/utils/http";
 import { GroupRepository } from "@/server/repositories/group.repository";
@@ -20,6 +21,7 @@ const QUARTER_FINALS_EXTERNAL_ROUND_ID = 6;
 const SEMI_FINALS_PHASE = "semi_finals";
 const SEMI_FINALS_EXTERNAL_ROUND_ID = 7;
 const FINAL_PHASE = "final";
+const THIRD_PLACE_PHASE = "third_place";
 const FINAL_EXTERNAL_ROUND_ID = 8;
 
 export class SecondPhaseService {
@@ -30,11 +32,18 @@ export class SecondPhaseService {
 
   async getStatus() {
     return {
-      generatedMatches: await this.matchRepository.countByPhase(ROUND_OF_32_PHASE),
-      roundOf16GeneratedMatches: await this.matchRepository.countByPhase(ROUND_OF_16_PHASE),
-      quarterFinalsGeneratedMatches: await this.matchRepository.countByPhase(QUARTER_FINALS_PHASE),
-      semiFinalsGeneratedMatches: await this.matchRepository.countByPhase(SEMI_FINALS_PHASE),
-      finalGeneratedMatches: await this.matchRepository.countByPhase(FINAL_PHASE)
+      generatedMatches:
+        await this.matchRepository.countByPhase(ROUND_OF_32_PHASE),
+      roundOf16GeneratedMatches:
+        await this.matchRepository.countByPhase(ROUND_OF_16_PHASE),
+      quarterFinalsGeneratedMatches:
+        await this.matchRepository.countByPhase(QUARTER_FINALS_PHASE),
+      semiFinalsGeneratedMatches:
+        await this.matchRepository.countByPhase(SEMI_FINALS_PHASE),
+      finalGeneratedMatches:
+        await this.matchRepository.countByPhase(FINAL_PHASE),
+      thirdPlaceGeneratedMatches:
+        await this.matchRepository.countByPhase(THIRD_PLACE_PHASE)
     };
   }
 
@@ -46,17 +55,29 @@ export class SecondPhaseService {
     ]);
     const finalRound = [...rounds]
       .filter((round) => round.status === "official")
-      .sort((left, right) => right.external_round_id - left.external_round_id)[0];
+      .sort(
+        (left, right) => right.external_round_id - left.external_round_id
+      )[0];
 
     if (!finalRound) {
-      throw new HttpError(409, "Nenhuma rodada oficializada encontrada para gerar a segunda fase.");
+      throw new HttpError(
+        409,
+        "Nenhuma rodada oficializada encontrada para gerar a segunda fase."
+      );
     }
 
-    const groupCodeById = new Map(groups.map((group) => [group.id, group.code]));
+    const groupCodeById = new Map(
+      groups.map((group) => [group.id, group.code])
+    );
     const finalStandings = standings
-      .filter((standing) => standing.round_id === finalRound.id && standing.phase === "groups")
+      .filter(
+        (standing) =>
+          standing.round_id === finalRound.id && standing.phase === "groups"
+      )
       .map((standing) => {
-        const groupCode = standing.group_id ? groupCodeById.get(standing.group_id) : null;
+        const groupCode = standing.group_id
+          ? groupCodeById.get(standing.group_id)
+          : null;
 
         if (!groupCode) {
           return null;
@@ -72,10 +93,14 @@ export class SecondPhaseService {
           pointsFor: Number(standing.points_for)
         };
       })
-      .filter((standing): standing is NonNullable<typeof standing> => Boolean(standing));
+      .filter((standing): standing is NonNullable<typeof standing> =>
+        Boolean(standing)
+      );
 
     const generatedRound =
-      (await this.roundRepository.getByExternalRoundId(ROUND_OF_32_EXTERNAL_ROUND_ID)) ??
+      (await this.roundRepository.getByExternalRoundId(
+        ROUND_OF_32_EXTERNAL_ROUND_ID
+      )) ??
       (await this.roundRepository.upsert({
         externalRoundId: ROUND_OF_32_EXTERNAL_ROUND_ID,
         name: "Segunda fase",
@@ -117,23 +142,38 @@ export class SecondPhaseService {
         this.roundRepository.listAll(),
         this.matchRepository.listAll()
       ]);
-      const roundOf32Matches = matches.filter((match) => match.phase === ROUND_OF_32_PHASE);
-
-      logs.push(`Encontrados ${roundOf32Matches.length} confrontos da segunda fase.`);
-
-      if (roundOf32Matches.length !== 16) {
-        logs.push("Falha: a segunda fase precisa ter exatamente 16 confrontos persistidos.");
-        throw new HttpError(409, "A segunda fase precisa ter 16 confrontos persistidos.", {
-          logs
-        });
-      }
-
-      const nonOfficialMatches = roundOf32Matches.filter((match) => match.state !== "official");
-      const matchesWithoutWinner = roundOf32Matches.filter(
-        (match) => match.result_type !== "home_win" && match.result_type !== "away_win"
+      const roundOf32Matches = matches.filter(
+        (match) => match.phase === ROUND_OF_32_PHASE
       );
 
-      logs.push(`${roundOf32Matches.length - nonOfficialMatches.length} confrontos estao oficializados.`);
+      logs.push(
+        `Encontrados ${roundOf32Matches.length} confrontos da segunda fase.`
+      );
+
+      if (roundOf32Matches.length !== 16) {
+        logs.push(
+          "Falha: a segunda fase precisa ter exatamente 16 confrontos persistidos."
+        );
+        throw new HttpError(
+          409,
+          "A segunda fase precisa ter 16 confrontos persistidos.",
+          {
+            logs
+          }
+        );
+      }
+
+      const nonOfficialMatches = roundOf32Matches.filter(
+        (match) => match.state !== "official"
+      );
+      const matchesWithoutWinner = roundOf32Matches.filter(
+        (match) =>
+          match.result_type !== "home_win" && match.result_type !== "away_win"
+      );
+
+      logs.push(
+        `${roundOf32Matches.length - nonOfficialMatches.length} confrontos estao oficializados.`
+      );
 
       if (nonOfficialMatches.length > 0) {
         logs.push(
@@ -148,7 +188,9 @@ export class SecondPhaseService {
         );
       }
 
-      logs.push(`${roundOf32Matches.length - matchesWithoutWinner.length} confrontos possuem vencedor definido.`);
+      logs.push(
+        `${roundOf32Matches.length - matchesWithoutWinner.length} confrontos possuem vencedor definido.`
+      );
 
       if (matchesWithoutWinner.length > 0) {
         logs.push(
@@ -163,8 +205,12 @@ export class SecondPhaseService {
         );
       }
 
-      const matchesByRoundId = new Map(rounds.map((round) => [round.id, round]));
-      logs.push("Montando confrontos das oitavas a partir dos vencedores da segunda fase.");
+      const matchesByRoundId = new Map(
+        rounds.map((round) => [round.id, round])
+      );
+      logs.push(
+        "Montando confrontos das oitavas a partir dos vencedores da segunda fase."
+      );
       const generatedMatches = buildRoundOf16Matches(
         roundOf32Matches.map((match) => ({
           phaseSlot: match.phase_slot,
@@ -175,10 +221,14 @@ export class SecondPhaseService {
         }))
       );
 
-      logs.push(`Chaveamento montado com ${generatedMatches.length} confrontos de oitavas.`);
+      logs.push(
+        `Chaveamento montado com ${generatedMatches.length} confrontos de oitavas.`
+      );
       logs.push("Carregando ou criando registro da rodada 5.");
       const generatedRound =
-        (await this.roundRepository.getByExternalRoundId(ROUND_OF_16_EXTERNAL_ROUND_ID)) ??
+        (await this.roundRepository.getByExternalRoundId(
+          ROUND_OF_16_EXTERNAL_ROUND_ID
+        )) ??
         (await this.roundRepository.upsert({
           externalRoundId: ROUND_OF_16_EXTERNAL_ROUND_ID,
           name: "Oitavas de final",
@@ -204,9 +254,12 @@ export class SecondPhaseService {
         }))
       );
       const sourceRoundName =
-        matchesByRoundId.get(roundOf32Matches[0]?.round_id ?? "")?.name ?? "Segunda fase";
+        matchesByRoundId.get(roundOf32Matches[0]?.round_id ?? "")?.name ??
+        "Segunda fase";
 
-      logs.push(`Sucesso: ${insertedMatches.length} confrontos de oitavas foram persistidos.`);
+      logs.push(
+        `Sucesso: ${insertedMatches.length} confrontos de oitavas foram persistidos.`
+      );
 
       return {
         roundId: generatedRound.id,
@@ -220,9 +273,12 @@ export class SecondPhaseService {
         throw error;
       }
 
-      const message = error instanceof Error ? error.message : "Falha desconhecida.";
+      const message =
+        error instanceof Error ? error.message : "Falha desconhecida.";
       logs.push(`Falha inesperada: ${message}`);
-      throw new HttpError(500, `Falha ao gerar oitavas de final: ${message}`, { logs });
+      throw new HttpError(500, `Falha ao gerar oitavas de final: ${message}`, {
+        logs
+      });
     }
   }
 
@@ -235,23 +291,38 @@ export class SecondPhaseService {
         this.roundRepository.listAll(),
         this.matchRepository.listAll()
       ]);
-      const roundOf16Matches = matches.filter((match) => match.phase === ROUND_OF_16_PHASE);
-
-      logs.push(`Encontrados ${roundOf16Matches.length} confrontos de oitavas.`);
-
-      if (roundOf16Matches.length !== 8) {
-        logs.push("Falha: as oitavas precisam ter exatamente 8 confrontos persistidos.");
-        throw new HttpError(409, "As oitavas precisam ter 8 confrontos persistidos.", {
-          logs
-        });
-      }
-
-      const nonOfficialMatches = roundOf16Matches.filter((match) => match.state !== "official");
-      const matchesWithoutWinner = roundOf16Matches.filter(
-        (match) => match.result_type !== "home_win" && match.result_type !== "away_win"
+      const roundOf16Matches = matches.filter(
+        (match) => match.phase === ROUND_OF_16_PHASE
       );
 
-      logs.push(`${roundOf16Matches.length - nonOfficialMatches.length} confrontos estao oficializados.`);
+      logs.push(
+        `Encontrados ${roundOf16Matches.length} confrontos de oitavas.`
+      );
+
+      if (roundOf16Matches.length !== 8) {
+        logs.push(
+          "Falha: as oitavas precisam ter exatamente 8 confrontos persistidos."
+        );
+        throw new HttpError(
+          409,
+          "As oitavas precisam ter 8 confrontos persistidos.",
+          {
+            logs
+          }
+        );
+      }
+
+      const nonOfficialMatches = roundOf16Matches.filter(
+        (match) => match.state !== "official"
+      );
+      const matchesWithoutWinner = roundOf16Matches.filter(
+        (match) =>
+          match.result_type !== "home_win" && match.result_type !== "away_win"
+      );
+
+      logs.push(
+        `${roundOf16Matches.length - nonOfficialMatches.length} confrontos estao oficializados.`
+      );
 
       if (nonOfficialMatches.length > 0) {
         logs.push(
@@ -266,7 +337,9 @@ export class SecondPhaseService {
         );
       }
 
-      logs.push(`${roundOf16Matches.length - matchesWithoutWinner.length} confrontos possuem vencedor definido.`);
+      logs.push(
+        `${roundOf16Matches.length - matchesWithoutWinner.length} confrontos possuem vencedor definido.`
+      );
 
       if (matchesWithoutWinner.length > 0) {
         logs.push(
@@ -281,8 +354,12 @@ export class SecondPhaseService {
         );
       }
 
-      const matchesByRoundId = new Map(rounds.map((round) => [round.id, round]));
-      logs.push("Montando confrontos das quartas a partir dos vencedores das oitavas.");
+      const matchesByRoundId = new Map(
+        rounds.map((round) => [round.id, round])
+      );
+      logs.push(
+        "Montando confrontos das quartas a partir dos vencedores das oitavas."
+      );
       const generatedMatches = buildQuarterFinalMatches(
         roundOf16Matches.map((match) => ({
           phaseSlot: match.phase_slot,
@@ -293,10 +370,14 @@ export class SecondPhaseService {
         }))
       );
 
-      logs.push(`Chaveamento montado com ${generatedMatches.length} confrontos de quartas.`);
+      logs.push(
+        `Chaveamento montado com ${generatedMatches.length} confrontos de quartas.`
+      );
       logs.push("Carregando ou criando registro da rodada 6.");
       const generatedRound =
-        (await this.roundRepository.getByExternalRoundId(QUARTER_FINALS_EXTERNAL_ROUND_ID)) ??
+        (await this.roundRepository.getByExternalRoundId(
+          QUARTER_FINALS_EXTERNAL_ROUND_ID
+        )) ??
         (await this.roundRepository.upsert({
           externalRoundId: QUARTER_FINALS_EXTERNAL_ROUND_ID,
           name: "Quartas de final",
@@ -322,9 +403,12 @@ export class SecondPhaseService {
         }))
       );
       const sourceRoundName =
-        matchesByRoundId.get(roundOf16Matches[0]?.round_id ?? "")?.name ?? "Oitavas de final";
+        matchesByRoundId.get(roundOf16Matches[0]?.round_id ?? "")?.name ??
+        "Oitavas de final";
 
-      logs.push(`Sucesso: ${insertedMatches.length} confrontos de quartas foram persistidos.`);
+      logs.push(
+        `Sucesso: ${insertedMatches.length} confrontos de quartas foram persistidos.`
+      );
 
       return {
         roundId: generatedRound.id,
@@ -338,9 +422,12 @@ export class SecondPhaseService {
         throw error;
       }
 
-      const message = error instanceof Error ? error.message : "Falha desconhecida.";
+      const message =
+        error instanceof Error ? error.message : "Falha desconhecida.";
       logs.push(`Falha inesperada: ${message}`);
-      throw new HttpError(500, `Falha ao gerar quartas de final: ${message}`, { logs });
+      throw new HttpError(500, `Falha ao gerar quartas de final: ${message}`, {
+        logs
+      });
     }
   }
 
@@ -353,23 +440,38 @@ export class SecondPhaseService {
         this.roundRepository.listAll(),
         this.matchRepository.listAll()
       ]);
-      const quarterFinalMatches = matches.filter((match) => match.phase === QUARTER_FINALS_PHASE);
-
-      logs.push(`Encontrados ${quarterFinalMatches.length} confrontos de quartas.`);
-
-      if (quarterFinalMatches.length !== 4) {
-        logs.push("Falha: as quartas precisam ter exatamente 4 confrontos persistidos.");
-        throw new HttpError(409, "As quartas precisam ter 4 confrontos persistidos.", {
-          logs
-        });
-      }
-
-      const nonOfficialMatches = quarterFinalMatches.filter((match) => match.state !== "official");
-      const matchesWithoutWinner = quarterFinalMatches.filter(
-        (match) => match.result_type !== "home_win" && match.result_type !== "away_win"
+      const quarterFinalMatches = matches.filter(
+        (match) => match.phase === QUARTER_FINALS_PHASE
       );
 
-      logs.push(`${quarterFinalMatches.length - nonOfficialMatches.length} confrontos estao oficializados.`);
+      logs.push(
+        `Encontrados ${quarterFinalMatches.length} confrontos de quartas.`
+      );
+
+      if (quarterFinalMatches.length !== 4) {
+        logs.push(
+          "Falha: as quartas precisam ter exatamente 4 confrontos persistidos."
+        );
+        throw new HttpError(
+          409,
+          "As quartas precisam ter 4 confrontos persistidos.",
+          {
+            logs
+          }
+        );
+      }
+
+      const nonOfficialMatches = quarterFinalMatches.filter(
+        (match) => match.state !== "official"
+      );
+      const matchesWithoutWinner = quarterFinalMatches.filter(
+        (match) =>
+          match.result_type !== "home_win" && match.result_type !== "away_win"
+      );
+
+      logs.push(
+        `${quarterFinalMatches.length - nonOfficialMatches.length} confrontos estao oficializados.`
+      );
 
       if (nonOfficialMatches.length > 0) {
         logs.push(
@@ -384,7 +486,9 @@ export class SecondPhaseService {
         );
       }
 
-      logs.push(`${quarterFinalMatches.length - matchesWithoutWinner.length} confrontos possuem vencedor definido.`);
+      logs.push(
+        `${quarterFinalMatches.length - matchesWithoutWinner.length} confrontos possuem vencedor definido.`
+      );
 
       if (matchesWithoutWinner.length > 0) {
         logs.push(
@@ -399,8 +503,12 @@ export class SecondPhaseService {
         );
       }
 
-      const matchesByRoundId = new Map(rounds.map((round) => [round.id, round]));
-      logs.push("Montando confrontos das semifinais a partir dos vencedores das quartas.");
+      const matchesByRoundId = new Map(
+        rounds.map((round) => [round.id, round])
+      );
+      logs.push(
+        "Montando confrontos das semifinais a partir dos vencedores das quartas."
+      );
       const generatedMatches = buildSemiFinalMatches(
         quarterFinalMatches.map((match) => ({
           phaseSlot: match.phase_slot,
@@ -411,10 +519,14 @@ export class SecondPhaseService {
         }))
       );
 
-      logs.push(`Chaveamento montado com ${generatedMatches.length} confrontos de semifinais.`);
+      logs.push(
+        `Chaveamento montado com ${generatedMatches.length} confrontos de semifinais.`
+      );
       logs.push("Carregando ou criando registro da rodada 7.");
       const generatedRound =
-        (await this.roundRepository.getByExternalRoundId(SEMI_FINALS_EXTERNAL_ROUND_ID)) ??
+        (await this.roundRepository.getByExternalRoundId(
+          SEMI_FINALS_EXTERNAL_ROUND_ID
+        )) ??
         (await this.roundRepository.upsert({
           externalRoundId: SEMI_FINALS_EXTERNAL_ROUND_ID,
           name: "Semifinais",
@@ -440,9 +552,12 @@ export class SecondPhaseService {
         }))
       );
       const sourceRoundName =
-        matchesByRoundId.get(quarterFinalMatches[0]?.round_id ?? "")?.name ?? "Quartas de final";
+        matchesByRoundId.get(quarterFinalMatches[0]?.round_id ?? "")?.name ??
+        "Quartas de final";
 
-      logs.push(`Sucesso: ${insertedMatches.length} confrontos de semifinais foram persistidos.`);
+      logs.push(
+        `Sucesso: ${insertedMatches.length} confrontos de semifinais foram persistidos.`
+      );
 
       return {
         roundId: generatedRound.id,
@@ -456,9 +571,12 @@ export class SecondPhaseService {
         throw error;
       }
 
-      const message = error instanceof Error ? error.message : "Falha desconhecida.";
+      const message =
+        error instanceof Error ? error.message : "Falha desconhecida.";
       logs.push(`Falha inesperada: ${message}`);
-      throw new HttpError(500, `Falha ao gerar semifinais: ${message}`, { logs });
+      throw new HttpError(500, `Falha ao gerar semifinais: ${message}`, {
+        logs
+      });
     }
   }
 
@@ -471,23 +589,38 @@ export class SecondPhaseService {
         this.roundRepository.listAll(),
         this.matchRepository.listAll()
       ]);
-      const semiFinalMatches = matches.filter((match) => match.phase === SEMI_FINALS_PHASE);
-
-      logs.push(`Encontrados ${semiFinalMatches.length} confrontos de semifinais.`);
-
-      if (semiFinalMatches.length !== 2) {
-        logs.push("Falha: as semifinais precisam ter exatamente 2 confrontos persistidos.");
-        throw new HttpError(409, "As semifinais precisam ter 2 confrontos persistidos.", {
-          logs
-        });
-      }
-
-      const nonOfficialMatches = semiFinalMatches.filter((match) => match.state !== "official");
-      const matchesWithoutWinner = semiFinalMatches.filter(
-        (match) => match.result_type !== "home_win" && match.result_type !== "away_win"
+      const semiFinalMatches = matches.filter(
+        (match) => match.phase === SEMI_FINALS_PHASE
       );
 
-      logs.push(`${semiFinalMatches.length - nonOfficialMatches.length} confrontos estao oficializados.`);
+      logs.push(
+        `Encontrados ${semiFinalMatches.length} confrontos de semifinais.`
+      );
+
+      if (semiFinalMatches.length !== 2) {
+        logs.push(
+          "Falha: as semifinais precisam ter exatamente 2 confrontos persistidos."
+        );
+        throw new HttpError(
+          409,
+          "As semifinais precisam ter 2 confrontos persistidos.",
+          {
+            logs
+          }
+        );
+      }
+
+      const nonOfficialMatches = semiFinalMatches.filter(
+        (match) => match.state !== "official"
+      );
+      const matchesWithoutWinner = semiFinalMatches.filter(
+        (match) =>
+          match.result_type !== "home_win" && match.result_type !== "away_win"
+      );
+
+      logs.push(
+        `${semiFinalMatches.length - nonOfficialMatches.length} confrontos estao oficializados.`
+      );
 
       if (nonOfficialMatches.length > 0) {
         logs.push(
@@ -502,7 +635,9 @@ export class SecondPhaseService {
         );
       }
 
-      logs.push(`${semiFinalMatches.length - matchesWithoutWinner.length} confrontos possuem vencedor definido.`);
+      logs.push(
+        `${semiFinalMatches.length - matchesWithoutWinner.length} confrontos possuem vencedor definido.`
+      );
 
       if (matchesWithoutWinner.length > 0) {
         logs.push(
@@ -517,22 +652,35 @@ export class SecondPhaseService {
         );
       }
 
-      const matchesByRoundId = new Map(rounds.map((round) => [round.id, round]));
-      logs.push("Montando confronto da final a partir dos vencedores das semifinais.");
-      const generatedMatches = buildFinalMatches(
-        semiFinalMatches.map((match) => ({
-          phaseSlot: match.phase_slot,
-          state: match.state,
-          resultType: match.result_type,
-          homeParticipantId: match.home_participant_id,
-          awayParticipantId: match.away_participant_id
-        }))
+      const matchesByRoundId = new Map(
+        rounds.map((round) => [round.id, round])
+      );
+      const semiFinalSourceMatches = semiFinalMatches.map((match) => ({
+        phaseSlot: match.phase_slot,
+        state: match.state,
+        resultType: match.result_type,
+        homeParticipantId: match.home_participant_id,
+        awayParticipantId: match.away_participant_id
+      }));
+      logs.push(
+        "Montando confronto da final a partir dos vencedores das semifinais."
+      );
+      const generatedFinalMatches = buildFinalMatches(semiFinalSourceMatches);
+      logs.push(
+        "Montando disputa de terceiro lugar a partir dos perdedores das semifinais."
+      );
+      const generatedThirdPlaceMatches = buildThirdPlaceMatches(
+        semiFinalSourceMatches
       );
 
-      logs.push(`Chaveamento montado com ${generatedMatches.length} confronto da final.`);
+      logs.push(
+        `Chaveamento montado com ${generatedFinalMatches.length} confronto da final e ${generatedThirdPlaceMatches.length} disputa de terceiro lugar.`
+      );
       logs.push("Carregando ou criando registro da rodada 8.");
       const generatedRound =
-        (await this.roundRepository.getByExternalRoundId(FINAL_EXTERNAL_ROUND_ID)) ??
+        (await this.roundRepository.getByExternalRoundId(
+          FINAL_EXTERNAL_ROUND_ID
+        )) ??
         (await this.roundRepository.upsert({
           externalRoundId: FINAL_EXTERNAL_ROUND_ID,
           name: "Final",
@@ -541,26 +689,54 @@ export class SecondPhaseService {
         }));
 
       logs.push("Substituindo confronto atual da final no banco.");
-      const insertedMatches = await this.matchRepository.replacePhaseMatches(
-        FINAL_PHASE,
-        generatedMatches.map((match) => ({
-          phase: FINAL_PHASE,
-          phaseSlot: match.phaseSlot,
-          groupId: null,
-          roundId: generatedRound.id,
-          homeParticipantId: match.homeParticipantId,
-          awayParticipantId: match.awayParticipantId,
-          homePoints: null,
-          awayPoints: null,
-          resultType: null,
-          state: "scheduled",
-          decidedByRule: "score"
-        }))
+      const insertedFinalMatches =
+        await this.matchRepository.replacePhaseMatches(
+          FINAL_PHASE,
+          generatedFinalMatches.map((match) => ({
+            phase: FINAL_PHASE,
+            phaseSlot: match.phaseSlot,
+            groupId: null,
+            roundId: generatedRound.id,
+            homeParticipantId: match.homeParticipantId,
+            awayParticipantId: match.awayParticipantId,
+            homePoints: null,
+            awayPoints: null,
+            resultType: null,
+            state: "scheduled",
+            decidedByRule: "score"
+          }))
+        );
+      logs.push(
+        "Substituindo confronto atual da disputa de terceiro lugar no banco."
       );
+      const insertedThirdPlaceMatches =
+        await this.matchRepository.replacePhaseMatches(
+          THIRD_PLACE_PHASE,
+          generatedThirdPlaceMatches.map((match) => ({
+            phase: THIRD_PLACE_PHASE,
+            phaseSlot: match.phaseSlot,
+            groupId: null,
+            roundId: generatedRound.id,
+            homeParticipantId: match.homeParticipantId,
+            awayParticipantId: match.awayParticipantId,
+            homePoints: null,
+            awayPoints: null,
+            resultType: null,
+            state: "scheduled",
+            decidedByRule: "score"
+          }))
+        );
       const sourceRoundName =
-        matchesByRoundId.get(semiFinalMatches[0]?.round_id ?? "")?.name ?? "Semifinais";
+        matchesByRoundId.get(semiFinalMatches[0]?.round_id ?? "")?.name ??
+        "Semifinais";
+      const insertedMatches = [
+        ...insertedFinalMatches,
+        ...insertedThirdPlaceMatches
+      ];
 
-      logs.push(`Sucesso: ${insertedMatches.length} confronto da final foi persistido.`);
+      logs.push(
+        `Sucesso: ${insertedMatches.length} confrontos da fase final foram persistidos.`
+      );
 
       return {
         roundId: generatedRound.id,
@@ -574,7 +750,8 @@ export class SecondPhaseService {
         throw error;
       }
 
-      const message = error instanceof Error ? error.message : "Falha desconhecida.";
+      const message =
+        error instanceof Error ? error.message : "Falha desconhecida.";
       logs.push(`Falha inesperada: ${message}`);
       throw new HttpError(500, `Falha ao gerar final: ${message}`, { logs });
     }
