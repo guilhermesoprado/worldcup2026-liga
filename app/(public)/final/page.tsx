@@ -84,7 +84,7 @@ export default async function FinalPage() {
           <MostPickedList players={finalMostPicked.slice(0, 7)} />
         ) : (
           <EmptyState
-            title="Sem escalacoes para a final"
+            title="Sem escalacoes para a final" 
             description="O ranking aparece quando a rodada tiver jogadores efetivamente contabilizados pelo Cartola."
           />
         )}

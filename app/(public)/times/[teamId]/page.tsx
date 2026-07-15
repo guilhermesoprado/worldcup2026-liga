@@ -43,7 +43,7 @@ export default async function TeamDetailPage({
 
   return (
     <main className="shell public-home">
-      <TeamDetailView detail={detail} view={view} />
+      <TeamDetailView detail={detail} view={view}  />
     </main>
   );
 }
