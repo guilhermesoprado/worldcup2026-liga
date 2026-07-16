@@ -25,7 +25,7 @@ export default async function SemiFinalPage() {
     semiFinalsMatches.length > 0;
   const finalAvailable =
     snapshot.availableRounds.includes(FINAL_EXTERNAL_ROUND_ID) &&
-    finalRoundMatches.some((match) => match.state !== "scheduled");
+    finalRoundMatches.length > 0;
   const visibleMatches = shouldShowRound ? semiFinalsMatches : [];
 
   return (

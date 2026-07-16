@@ -13,8 +13,7 @@ export default async function HomePage() {
     snapshot.availableRounds.includes(FINAL_EXTERNAL_ROUND_ID) &&
     snapshot.matches.some(
       (match) =>
-        (match.phase === "final" || match.phase === "third_place") &&
-        match.state !== "scheduled"
+        match.phase === "final" || match.phase === "third_place"
     );
 
   return finalRoundStarted ? <FinalPage /> : <SemiFinalPage />;

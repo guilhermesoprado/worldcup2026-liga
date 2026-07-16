@@ -22,7 +22,7 @@ export default async function FinalPage() {
     snapshot.mostPickedByRound[String(FINAL_EXTERNAL_ROUND_ID)] ?? [];
   const shouldShowRound =
     snapshot.availableRounds.includes(FINAL_EXTERNAL_ROUND_ID) &&
-    finalRoundMatches.some((match) => match.state !== "scheduled");
+    finalRoundMatches.length > 0;
   const visibleFinalMatches = shouldShowRound ? finalMatches : [];
   const visibleThirdPlaceMatches = shouldShowRound ? thirdPlaceMatches : [];
   const visibleMatches = [...visibleFinalMatches, ...visibleThirdPlaceMatches];
